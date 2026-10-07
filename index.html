@@ -7,6 +7,10 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/dist/pmtiles.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js"></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap">
 <style>
 /* Design tokens */
@@ -540,18 +544,60 @@ function col(id,st){
 
 /* ===== MAP（Leaflet + 国土地理院地図） ===== */
 const GSI_ATTR='<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>';
-const BASE_LAYERS={
-  '地理院 淡色地図':L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxNativeZoom:18,maxZoom:20,attribution:GSI_ATTR}),
-  '地理院 標準地図':L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxNativeZoom:18,maxZoom:20,attribution:GSI_ATTR}),
-  '航空写真':L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{maxNativeZoom:18,maxZoom:20,attribution:GSI_ATTR}),
-  'OpenStreetMap':L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxNativeZoom:19,maxZoom:20,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}),
+/* シンプル地図：国土地理院ベクトルタイルから「陸・海・海岸線・行政界・都道府県/市区町村名」だけを描画。
+   道路・鉄道・建物・地図記号・細かい町名は表示しない */
+const C_SEA='#CFE0EE', C_LAND='#F7F6F2';
+const ADM_NAMES=[110,120,130,140]; // 注記分類コード：都道府県名・市区町村名
+const SIMPLE_STYLE={
+  version:8,
+  glyphs:'https://gsi-cyberjapan.github.io/optimal_bvmap/glyphs/{fontstack}/{range}.pbf',
+  sources:{v:{type:'vector',minzoom:4,maxzoom:16,
+    tiles:['pmtiles://https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/optimal_bvmap-v1.pmtiles/{z}/{x}/{y}']}},
+  layers:[
+    // 低ズームでは海を背景色、ズーム8以上では水域ポリゴンで海を塗る（地理院の標準スタイルと同じ構成）
+    {id:'bg',type:'background',paint:{'background-color':['step',['zoom'],C_SEA,8,C_LAND]}},
+    {id:'land',type:'fill',source:'v','source-layer':'AdmArea',paint:{'fill-color':C_LAND}},
+    {id:'water',type:'fill',source:'v','source-layer':'WA',paint:{'fill-color':C_SEA}},
+    {id:'coast',type:'line',source:'v','source-layer':'Cstline',paint:{'line-color':'#A9BFD0','line-width':.8}},
+    {id:'city-bdry',type:'line',source:'v','source-layer':'AdmBdry',minzoom:9,filter:['==',['get','vt_code'],1212],
+      paint:{'line-color':'#DDD8CE','line-width':.8}},
+    {id:'pref-bdry',type:'line',source:'v','source-layer':'AdmBdry',filter:['==',['get','vt_code'],1211],
+      paint:{'line-color':'#BDB6A8','line-width':['interpolate',['linear'],['zoom'],5,.6,10,1.4]}},
+    {id:'adm-names',type:'symbol',source:'v','source-layer':'Anno',
+      filter:['all',['==',['geometry-type'],'Point'],['in',['get','vt_code'],['literal',ADM_NAMES]],
+        ['step',['zoom'],['any',['!',['has','vt_flag17']],['in',['get','vt_flag17'],['literal',[0,1]]]],
+          17,['any',['!',['has','vt_flag17']],['in',['get','vt_flag17'],['literal',[1,2]]]]]],
+      layout:{'text-field':['get','vt_text'],'text-font':['literal',['NotoSansJP-Regular']],
+        'text-size':['match',['get','vt_code'],110,14,[120,140],12.5,11.5],
+        'symbol-sort-key':['match',['get','vt_code'],110,0,[120,140],1,2],'text-padding':6},
+      paint:{'text-color':['match',['get','vt_code'],110,'#3F4A5A','#5E6878'],
+        'text-halo-color':'rgba(255,255,255,.95)','text-halo-width':1.6}},
+  ],
 };
-const map=L.map('map',{zoomControl:false,minZoom:4,maxZoom:20}).setView([36.5,137.5],5);
+const GSI_VT_ATTR='<a href="https://github.com/gsi-cyberjapan/optimal_bvmap" target="_blank" rel="noopener">国土地理院最適化ベクトルタイル</a>';
+function simpleLayer(){
+  // ベクトル地図が使えない環境（ライブラリ読込失敗・WebGL非対応）では淡色地図で代替
+  const c=document.createElement('canvas');
+  const gl=c.getContext('webgl2')||c.getContext('webgl');
+  if(!gl||!window.maplibregl||!window.pmtiles||!L.maplibreGL) return null;
+  try{ maplibregl.addProtocol('pmtiles',new pmtiles.Protocol().tile); }catch(e){}
+  const layer=L.maplibreGL({style:SIMPLE_STYLE});
+  layer.getAttribution=()=>GSI_VT_ATTR; // 出典表示（国土地理院の利用規約で必須）
+  return layer;
+}
+const paleLayer=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxNativeZoom:18,maxZoom:20,attribution:GSI_ATTR});
+const BASE_LAYERS={
+  'シンプル（おすすめ）':simpleLayer()||paleLayer,
+  '詳細地図（道路・駅あり）':paleLayer,
+  '航空写真':L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{maxNativeZoom:18,maxZoom:20,attribution:GSI_ATTR}),
+};
+if(BASE_LAYERS['シンプル（おすすめ）']===paleLayer) delete BASE_LAYERS['シンプル（おすすめ）'];
+const map=L.map('map',{zoomControl:false,minZoom:4,maxZoom:18}).setView([36.5,137.5],5);
 // 前回選んだ地図の種類を復元
-let baseName='地理院 淡色地図';
-try{ const v=localStorage.getItem('mg_base'); if(v&&BASE_LAYERS[v]) baseName=v; }catch(e){}
+let baseName=Object.keys(BASE_LAYERS)[0];
+try{ const v=localStorage.getItem('mg_base2'); if(v&&BASE_LAYERS[v]) baseName=v; }catch(e){}
 BASE_LAYERS[baseName].addTo(map);
-map.on('baselayerchange',e=>{ try{localStorage.setItem('mg_base',e.name);}catch(_){} });
+map.on('baselayerchange',e=>{ try{localStorage.setItem('mg_base2',e.name);}catch(_){} });
 L.control.layers(BASE_LAYERS,null,{position:'topleft'}).addTo(map);
 L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
 
