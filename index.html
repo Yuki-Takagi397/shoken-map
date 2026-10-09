@@ -43,7 +43,62 @@
 body{font-family:"Noto Sans JP",system-ui,sans-serif;font-size:14px;color:var(--text);background:var(--bg);overflow:hidden}
 
 /* Layout - fixed to viewport, reliable in iframe */
-#app{position:fixed;inset:0;display:flex;overflow:hidden}
+/* Top bar（タイトル・タブ・ログイン） */
+#topbar{position:fixed;top:0;left:0;right:0;height:46px;display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--border);z-index:30}
+.tb-title{font-size:14px;font-weight:700;white-space:nowrap}
+.tabs{display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:2px}
+.tab{padding:5px 14px;border:none;border-radius:7px;background:none;font-family:inherit;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer}
+.tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.tb-auth{margin-left:auto;display:flex;align-items:center;gap:6px;min-width:0}
+#app{position:fixed;inset:46px 0 0 0;display:flex;overflow:hidden}
+body[data-view=cal] #app,body[data-view=cal] #detail{display:none!important}
+/* Calendar */
+#cal{position:fixed;inset:46px 0 0 0;display:none;overflow:hidden;background:var(--bg)}
+body[data-view=cal] #cal{display:flex}
+.cal-main{flex:1;display:flex;flex-direction:column;min-width:0;padding:12px;gap:8px}
+.cal-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cal-ym{font-size:18px;font-weight:700;min-width:120px;text-align:center;font-variant-numeric:tabular-nums}
+.cal-legend{margin-left:auto;display:flex;gap:10px;font-size:10px;color:var(--text2);align-items:center}
+.cal-grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;background:var(--border);gap:1px;border:1px solid var(--border);border-radius:10px;overflow:hidden;min-height:0}
+.cal-dow{background:var(--surface2);font-size:10px;font-weight:700;text-align:center;padding:5px 0;color:var(--text2)}
+.cal-dow.sun,.cd.sun .cd-n{color:#DC2626}.cal-dow.sat,.cd.sat .cd-n{color:#2563EB}
+.cd{background:var(--surface);padding:4px;display:flex;flex-direction:column;gap:2px;min-height:0;overflow:hidden;cursor:default}
+.cd.can-add{cursor:pointer}.cd.can-add:hover{background:var(--surface2)}
+.cd.oth{background:var(--surface2)}.cd.oth .cd-n{opacity:.45}
+.cd-n{font-size:11px;font-weight:600;line-height:18px;width:20px;height:20px;text-align:center;border-radius:50%;flex-shrink:0}
+.cd.tod .cd-n{background:var(--range);color:#fff!important}
+.ce{font-size:10px;line-height:1.3;padding:2px 5px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;flex-shrink:0}
+.ce:hover{filter:brightness(.95)}
+.ce.plan{background:rgba(37,99,235,.1);color:#1D4ED8;border:1px dashed rgba(37,99,235,.55)}
+.ce.plan.late{background:rgba(217,119,6,.12);color:#B45309;border-color:rgba(217,119,6,.6)}
+.ce.done{background:#DC2626;color:#fff;border:1px solid #DC2626}
+.ce-more{font-size:9px;color:var(--text3);padding-left:4px;cursor:pointer}
+.cal-side{width:290px;border-left:1px solid var(--border);background:var(--surface);overflow-y:auto;padding:12px}
+.cs-hd{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--text3);margin:12px 0 6px}
+.cs-hd:first-child{margin-top:0}
+.cs-item{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;cursor:pointer;border:1px solid var(--border);margin-bottom:5px}
+.cs-item:hover{background:var(--surface2)}
+.cs-date{font-size:11px;font-weight:700;min-width:46px;font-variant-numeric:tabular-nums}
+.cs-body{flex:1;min-width:0}
+.cs-nm{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-memo{font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-empty{font-size:11px;color:var(--text3);padding:6px 2px}
+.cs-late .cs-date{color:#B45309}
+/* 予定・実施ダイアログ */
+.em-type{display:flex;gap:6px}
+.em-type label{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text2)}
+.em-type input{display:none}
+.em-type label.on-plan{border-color:var(--range);color:var(--range);background:rgba(37,99,235,.06)}
+.em-type label.on-done{border-color:var(--event);color:var(--event);background:rgba(220,38,38,.06)}
+.em-type label.dis{opacity:.4;cursor:not-allowed}
+.em-warn{font-size:10px;line-height:1.6;border-radius:7px;padding:7px 9px;margin-top:8px;background:rgba(217,119,6,.08);border:1px solid rgba(217,119,6,.25);color:#B45309}
+.em-ro{font-size:12px;line-height:1.8}
+textarea.f-inp{resize:vertical;min-height:52px}
+/* 店舗詳細の予定一覧 */
+.dp-list{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.dp-item{font-size:10px;padding:5px 7px;border-radius:6px;background:rgba(37,99,235,.07);color:#1D4ED8;cursor:pointer;border:1px dashed rgba(37,99,235,.4)}
+.dp-item.late{background:rgba(217,119,6,.08);color:#B45309;border-color:rgba(217,119,6,.45)}
+.chip-pl{background:rgba(37,99,235,.1);color:var(--range)}
 
 /* Sidebar */
 #sb{width:300px;min-width:300px;display:flex;flex-direction:column;background:var(--surface);border-right:1px solid var(--border);z-index:20;overflow:hidden}
@@ -148,7 +203,7 @@ body{font-family:"Noto Sans JP",system-ui,sans-serif;font-size:14px;color:var(--
 .ev.na{background:var(--surface2);color:var(--text3);cursor:default}
 
 /* Detail panel */
-#detail{position:absolute;top:10px;right:10px;width:270px;background:var(--surface);border-radius:12px;box-shadow:var(--shadow),0 0 0 1px var(--border);z-index:900;display:none;max-height:calc(100% - 20px);overflow-y:auto}
+#detail{position:absolute;top:56px;right:10px;width:270px;background:var(--surface);border-radius:12px;box-shadow:var(--shadow),0 0 0 1px var(--border);z-index:900;display:none;max-height:calc(100% - 66px);overflow-y:auto}
 #detail.open{display:block}
 #detail::-webkit-scrollbar{width:3px}#detail::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .dh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:12px 12px 8px}
@@ -224,21 +279,36 @@ body{font-family:"Noto Sans JP",system-ui,sans-serif;font-size:14px;color:var(--
   #app{flex-direction:column}
   #sb{width:100%;min-width:0;max-height:44vh}
   #mw{flex:1}
-  #detail{width:calc(100% - 16px);top:6px;right:8px}
+  #detail{width:calc(100% - 16px);top:52px;right:8px}
+  #topbar{gap:8px;padding:0 8px}
+  .tb-title{display:none}
+  .tab{padding:5px 10px}
+  #cal{flex-direction:column;overflow-y:auto}
+  .cal-main{padding:8px;flex:none;height:72vh}
+  .cal-side{width:auto;border-left:none;border-top:1px solid var(--border)}
+  .cal-legend{display:none}
+  .ce{font-size:9px;padding:1px 3px}
+  .ce-l{display:none}
 }
 </style>
 </head>
 <body>
 
+<header id="topbar">
+  <div class="tb-title">🗾 商圏マッピング</div>
+  <nav class="tabs">
+    <button class="tab active" id="tab-map" onclick="setView('map')">🗺 マップ</button>
+    <button class="tab" id="tab-cal" onclick="setView('cal')">📅 カレンダー</button>
+  </nav>
+  <div class="tb-auth">
+    <span class="auth-who" id="auth-who">閲覧モード</span>
+    <button class="btn auth-btn" id="auth-btn" onclick="onAuthBtn()">🔑 編集者ログイン</button>
+  </div>
+</header>
 <div id="app">
 <aside id="sb">
   <div class="sb-top">
-    <div class="sb-title">🗾 商圏マッピング</div>
     <div class="sb-sub">MYGOL グループ 全国97店舗</div>
-    <div class="auth-row">
-      <span class="auth-who" id="auth-who">閲覧モード</span>
-      <button class="btn auth-btn" id="auth-btn" onclick="onAuthBtn()">🔑 編集者ログイン</button>
-    </div>
   </div>
 
   <div class="toggle-row">
@@ -326,6 +396,29 @@ body{font-family:"Noto Sans JP",system-ui,sans-serif;font-size:14px;color:var(--
   <div class="da" id="d-act"></div>
 </div>
 
+<section id="cal">
+  <div class="cal-main">
+    <div class="cal-hd">
+      <button class="btn" onclick="calMove(-1)">‹</button>
+      <div class="cal-ym" id="cal-ym"></div>
+      <button class="btn" onclick="calMove(1)">›</button>
+      <button class="btn" onclick="calMove(0)">今日</button>
+      <button class="btn btn-prim" id="cal-add" style="width:auto;display:none" onclick="openEvModal({})">＋ 予定を登録</button>
+      <div class="cal-legend">
+        <span><span class="ce plan" style="display:inline-block">予定</span></span>
+        <span><span class="ce plan late" style="display:inline-block">実施報告待ち</span></span>
+        <span><span class="ce done" style="display:inline-block">実施済</span></span>
+      </div>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </div>
+  <aside class="cal-side" id="cal-side"></aside>
+</section>
+<!-- 予定・実施ダイアログ -->
+<div class="modal-ov hidden" id="ev-modal" onclick="if(event.target===this)hideEvModal()">
+  <div class="modal" id="ev-modal-body"></div>
+</div>
+<datalist id="store-names"></datalist>
 <div id="toast"></div>
 
 <!-- Login modal -->
@@ -526,16 +619,26 @@ RAW.forEach((r,i)=>{
 });
 
 /* Status */
-function status(id){
-  const now=Date.now(),s=S[id];if(!s)return{st:'ok'};
-  for(const ev of Object.values(E)) if(ev.sid===id&&ev.exp>now) return{st:'ev',ev};
-  if(s.lat!=null) for(const ev of Object.values(E)){
-    if(ev.exp<=now) continue;
+// 予定（st:'plan'）は商圏に反映しない。実施済（st:'done'、旧データは st なし）のみ反映
+const isDone=ev=>ev.st!=='plan';
+// 日時 ts 時点での店舗の状態（excludeId のイベントは除外）
+function statusAt(id,ts,excludeId){
+  const s=S[id];if(!s)return{st:'ok'};
+  const act=Object.values(E).filter(ev=>isDone(ev)&&ev.id!==excludeId&&ev.held<=ts&&ev.exp>ts);
+  for(const ev of act) if(ev.sid===id) return{st:'ev',ev};
+  if(s.lat!=null) for(const ev of act){
     const es=S[ev.sid];if(!es||ev.sid===id||es.lat==null) continue;
     if(hav(s.lat,s.lng,es.lat,es.lng)<(s.rad+es.rad)) return{st:'re',by:es,ev};
   }
   return{st:'ok'};
 }
+function status(id){ return statusAt(id,Date.now()); }
+// 店舗の予定（日付順）
+const plansOf=id=>Object.values(E).filter(ev=>ev.st==='plan'&&ev.sid===id).sort((a,b)=>a.held-b.held);
+const dayStart=(ts=Date.now())=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime()};
+const fmtMD=ts=>{const d=new Date(ts);return`${d.getMonth()+1}/${d.getDate()}`};
+const WD='日月火水木金土';
+const fmtW=ts=>`${fmt(ts)}（${WD[new Date(ts).getDay()]}）`;
 function col(id,st){
   const s=S[id];if(!s)return'#94A3B8';
   if(st==='ev')return'#DC2626';if(st==='re')return'#D97706';
@@ -703,6 +806,8 @@ function renderList(){
     else if(st==='ev'&&ev){meta=`直近でイベント実施済 〜 復活:${fmt(ev.exp)}`;btnC=isOwner?'can':'na';btnT=isOwner?'取消':'●';btnA=isOwner?()=>cancelEv(s.id):null;}
     else if(st==='re'&&by){meta=`制限中（${by.n}）`;btnC='lock';btnT='制限中';}
     else{meta=s.a;btnC=isOwner?'rec':'na';btnT=isOwner?'記録':'●';btnA=isOwner?()=>recEv(s.id):null;}
+    const np=plansOf(s.id)[0];
+    if(np&&s.a) meta=`📅 予定 ${fmtMD(np.held)}・${meta}`;
     let row=exist[s.id];
     if(!row){
       row=document.createElement('div');row.className='si';row.dataset.id=s.id;
@@ -747,6 +852,7 @@ function renderStats(){
 }
 
 function render(){
+  if(view==='cal') renderCal();
   drawMap();
   renderList();
   renderStats();
@@ -784,6 +890,8 @@ function showDetail(id){
     else if(st==='re') chips.push('<span class="chip chip-re">制限中</span>');
     else chips.push('<span class="chip chip-ok">実施可能</span>');
   } else chips.push('<span class="chip chip-ng">位置未取得</span>');
+  const pls=plansOf(id);
+  if(pls.length) chips.push(`<span class="chip chip-pl">📅 予定 ${pls.length}件</span>`);
   document.getElementById('d-chips').innerHTML=chips.join('');
   let info='';
   if(st==='ev'&&ev) info=`<div class="info-box ib-ev">✅ 直近でイベント実施済<br>実施日：${fmt(ev.held)}<br>商圏復活日：${fmt(ev.exp)}</div>`;
@@ -814,10 +922,17 @@ function showDetail(id){
   else if(st==='ok') act.innerHTML=`
     <div class="ev-date-row">
       <label>実施日</label>
-      <input class="ev-date-in" type="date" id="ev-date-in" value="${todayStr()}">
+      <input class="ev-date-in" type="date" id="ev-date-in" value="${todayStr()}" max="${todayStr()}">
     </div>
     <button class="btn btn-prim" onclick="recEv('${id}')">🎯 イベント実施を記録する</button>`;
   else act.innerHTML='';
+  // 予定（カレンダーと共通）
+  const today0=dayStart();
+  let ph='';
+  if(pls.length||isOwner) ph+='<div class="dl" style="margin-top:10px">予定</div>';
+  if(pls.length) ph+='<div class="dp-list">'+pls.map(p=>`<div class="dp-item${p.held<today0?' late':''}" onclick="openEvModal({id:'${p.id}'})">📅 ${fmtW(p.held)}${p.held<today0?' ・実施報告待ち':''}${p.memo?'<br>'+esc(p.memo):''}</div>`).join('')+'</div>';
+  if(isOwner&&s.a) ph+=`<button class="btn btn-sec" style="width:100%;justify-content:center;margin-top:6px" onclick="openEvModal({sid:'${id}',st:'plan'})">📅 予定を登録</button>`;
+  act.insertAdjacentHTML('beforeend',ph);
   document.getElementById('detail').classList.add('open');
 }
 
@@ -865,14 +980,15 @@ async function recEv(id){
     if(!isNaN(parsed)) held=parsed.getTime();
   }
   const eid=genId();
-  const d={id:eid,sid:id,held,exp:addM(held,3)};
+  if(held>Date.now()){ toast('⚠ 未来の日付は「予定を登録」から登録してください'); return; }
+  const d={id:eid,sid:id,held,exp:addM(held,3),st:'done',by:authUser?.email||''};
   E[eid]=d;
   if(db) db.doc(`events/${eid}`).set(d).catch(()=>{});else saveL();
   render();toast(`✅ ${s.n} のイベントを記録しました（${fmt(held)}）`);
 }
 async function cancelEv(id){
   const now=Date.now();
-  for(const[eid,ev] of Object.entries(E)) if(ev.sid===id&&ev.exp>now){
+  for(const[eid,ev] of Object.entries(E)) if(isDone(ev)&&ev.sid===id&&ev.held<=now&&ev.exp>now){
     delete E[eid];
     if(db) db.doc(`events/${eid}`).delete().catch(()=>{});else saveL();
     break;
@@ -1084,6 +1200,7 @@ async function refreshAuth(session, initial){
   const changed=owner!==isOwner;
   isOwner=owner;
   document.getElementById('add-btn-row').style.display=isOwner?'':'none';
+  document.getElementById('cal-add').style.display=isOwner?'':'none';
   document.getElementById('auth-who').textContent=
     !authUser?'閲覧モード':isOwner?`✏ 編集者：${authUser.email}`:`${authUser.email}（閲覧のみ）`;
   document.getElementById('auth-btn').textContent=authUser?'ログアウト':'🔑 編集者ログイン';
@@ -1114,8 +1231,207 @@ async function sendLoginLink(){
   toast('📧 ログイン用リンクを送信しました。メールを確認してください');
 }
 
+/* ===== カレンダー ===== */
+let view='map';
+let calY=new Date().getFullYear(), calM=new Date().getMonth();
+function setView(v){
+  view=v;
+  document.body.dataset.view=v;
+  document.getElementById('tab-map').classList.toggle('active',v==='map');
+  document.getElementById('tab-cal').classList.toggle('active',v==='cal');
+  try{localStorage.setItem('mg_view',v);}catch(e){}
+  if(v==='map') setTimeout(()=>map.invalidateSize(),0);
+  else renderCal();
+}
+function calMove(d){
+  if(d===0){ const n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
+  else { calM+=d; if(calM<0){calM=11;calY--;} if(calM>11){calM=0;calY++;} }
+  renderCal();
+}
+function evChip(ev,today0){
+  const s=S[ev.sid]; const nm=s?s.n:'（削除された店舗）';
+  const cls=ev.st==='plan'?('plan'+(ev.held<today0?' late':'')):'done';
+  const lbl=ev.st==='plan'?'予定':'実施';
+  return `<div class="ce ${cls}" title="${esc(nm)}${ev.memo?' — '+esc(ev.memo):''}" onclick="event.stopPropagation();openEvModal({id:'${ev.id}'})"><span class="ce-l">${lbl}｜</span>${esc(nm)}</div>`;
+}
+function renderCal(){
+  document.getElementById('cal-ym').textContent=`${calY}年${calM+1}月`;
+  const first=new Date(calY,calM,1);
+  const start=new Date(calY,calM,1-first.getDay());
+  const last=new Date(calY,calM+1,0);
+  const weeks=Math.ceil((first.getDay()+last.getDate())/7);
+  const today0=dayStart();
+  // 日付ごとにイベントを振り分け
+  const byDay={};
+  for(const ev of Object.values(E)){ const k=dayStart(ev.held); (byDay[k]=byDay[k]||[]).push(ev); }
+  const grid=document.getElementById('cal-grid');
+  grid.style.gridTemplateRows=`auto repeat(${weeks},1fr)`;
+  let h='';
+  for(let i=0;i<7;i++) h+=`<div class="cal-dow ${i===0?'sun':i===6?'sat':''}">${WD[i]}</div>`;
+  for(let i=0;i<weeks*7;i++){
+    const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    const k=d.getTime();
+    const evs=(byDay[k]||[]).sort((a,b)=>(a.st==='plan')-(b.st==='plan')||(S[a.sid]?.n||'').localeCompare(S[b.sid]?.n||'','ja'));
+    const max=3;
+    const cls=['cd',d.getMonth()!==calM?'oth':'',k===today0?'tod':'',d.getDay()===0?'sun':d.getDay()===6?'sat':'',isOwner?'can-add':''].join(' ');
+    h+=`<div class="${cls}" ${isOwner?`onclick="openEvModal({date:${k}})"`:''}><div class="cd-n">${d.getDate()}</div>`
+      +evs.slice(0,max).map(ev=>evChip(ev,today0)).join('')
+      +(evs.length>max?`<div class="ce-more" onclick="event.stopPropagation();showDayList(${k})">他 ${evs.length-max}件</div>`:'')
+      +'</div>';
+  }
+  grid.innerHTML=h;
+  // サイドパネル：実施報告待ち・今後の予定・直近の実施
+  const plans=Object.values(E).filter(ev=>ev.st==='plan').sort((a,b)=>a.held-b.held);
+  const late=plans.filter(p=>p.held<today0), upcoming=plans.filter(p=>p.held>=today0);
+  const done=Object.values(E).filter(ev=>isDone(ev)).sort((a,b)=>b.held-a.held).slice(0,10);
+  const item=(ev,extra='')=>`<div class="cs-item ${extra}" onclick="openEvModal({id:'${ev.id}'})"><div class="cs-date">${fmtMD(ev.held)}<span style="font-weight:400;color:var(--text3)">（${WD[new Date(ev.held).getDay()]}）</span></div><div class="cs-body"><div class="cs-nm">${esc(S[ev.sid]?.n||'（削除された店舗）')}</div>${ev.memo?`<div class="cs-memo">${esc(ev.memo)}</div>`:''}</div></div>`;
+  let sh='';
+  if(late.length) sh+=`<div class="cs-hd">⚠ 実施報告待ち（${late.length}）</div>`+late.map(p=>item(p,'cs-late')).join('');
+  sh+=`<div class="cs-hd">📅 今後の予定（${upcoming.length}）</div>`+(upcoming.length?upcoming.map(p=>item(p)).join(''):'<div class="cs-empty">予定はありません</div>');
+  sh+=`<div class="cs-hd">✅ 最近の実施</div>`+(done.length?done.map(p=>item(p)).join(''):'<div class="cs-empty">記録はありません</div>');
+  document.getElementById('cal-side').innerHTML=sh;
+}
+function showDayList(k){
+  const evs=Object.values(E).filter(ev=>dayStart(ev.held)===k);
+  const today0=dayStart();
+  document.getElementById('ev-modal-body').innerHTML=`
+    <div class="modal-hd"><span>${fmtW(k)}</span><button class="modal-x" onclick="hideEvModal()">×</button></div>
+    <div style="display:flex;flex-direction:column;gap:4px">${evs.map(ev=>evChip(ev,today0)).join('')}</div>
+    ${isOwner?`<div class="modal-ftr"><button class="btn btn-prim" onclick="openEvModal({date:${k}})">＋ この日に登録</button></div>`:''}`;
+  document.getElementById('ev-modal').classList.remove('hidden');
+}
+
+/* ===== 予定・実施ダイアログ（カレンダー・マップ共通） ===== */
+// opts: {id} 既存を開く / {sid, st, date} 新規
+let emCur=null;
+function storeKey(s){ return s.n; }
+function storeByKey(k){ k=(k||'').trim(); return Object.values(S).find(s=>storeKey(s)===k)||null; }
+function dateVal(ts){ const d=new Date(ts); return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function openEvModal(opts){
+  const ev=opts.id?E[opts.id]:null;
+  if(opts.id&&!ev){ toast('⚠ この予定は削除されています'); return; }
+  const today0=dayStart();
+  const st=ev?(ev.st==='plan'?'plan':'done'):(opts.st||((opts.date??today0+86400000)>today0?'plan':'done'));
+  const date=ev?ev.held:(opts.date??(st==='plan'?today0+86400000:today0));
+  const sid=ev?ev.sid:(opts.sid||'');
+  emCur={id:ev?.id||null, origSt:ev?st:null};
+  const s=S[sid];
+  const body=document.getElementById('ev-modal-body');
+  // 閲覧のみ
+  if(!isOwner){
+    if(!ev) return;
+    body.innerHTML=`
+      <div class="modal-hd"><span>${st==='plan'?'📅 予定':'✅ 実施記録'}</span><button class="modal-x" onclick="hideEvModal()">×</button></div>
+      <div class="em-ro"><b>${esc(s?.n||'（削除された店舗）')}</b><br>${fmtW(ev.held)}${st==='plan'&&ev.held<today0?' ・実施報告待ち':''}
+      ${st==='done'?`<br>商圏復活日：${fmt(ev.exp)}`:''}${ev.memo?`<br>メモ：${esc(ev.memo)}`:''}</div>
+      <div class="modal-ftr">${s?`<button class="btn btn-sec" onclick="goMap('${sid}')">🗺 マップで見る</button>`:''}<button class="btn btn-sec" onclick="hideEvModal()">閉じる</button></div>`;
+    document.getElementById('ev-modal').classList.remove('hidden');
+    return;
+  }
+  // 店舗候補
+  const dl=document.getElementById('store-names');
+  dl.innerHTML=Object.values(S).filter(x=>x.a).sort((a,b)=>a.n.localeCompare(b.n,'ja')).map(x=>`<option value="${esc(storeKey(x))}">`).join('');
+  body.innerHTML=`
+    <div class="modal-hd"><span>${ev?(st==='plan'?'📅 予定の編集':'✅ 実施記録の編集'):'＋ 予定・実施の登録'}</span><button class="modal-x" onclick="hideEvModal()">×</button></div>
+    <div class="f-row">
+      <label class="f-lbl">店舗 <span style="color:var(--event)">*</span></label>
+      <input class="f-inp" id="em-store" list="store-names" placeholder="店舗名を入力して選択" value="${s?esc(storeKey(s)):''}" ${opts.sid||ev?'':'autofocus'} oninput="emUpdate()">
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">日付</label>
+      <input class="f-inp" id="em-date" type="date" value="${dateVal(date)}" oninput="emUpdate()">
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">種別</label>
+      <div class="em-type">
+        <label id="em-l-plan"><input type="radio" name="em-st" value="plan" ${st==='plan'?'checked':''} onchange="emUpdate()">📅 予定</label>
+        <label id="em-l-done"><input type="radio" name="em-st" value="done" ${st==='done'?'checked':''} onchange="emUpdate()">✅ 実施済</label>
+      </div>
+      <div class="f-hint" id="em-hint"></div>
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">メモ</label>
+      <textarea class="f-inp" id="em-memo" placeholder="担当者・内容など（任意）">${esc(ev?.memo||'')}</textarea>
+    </div>
+    <div id="em-warn"></div>
+    <div class="modal-ftr">
+      ${ev?`<button class="btn btn-dng" style="flex:0 0 auto;width:auto" onclick="emDelete()">削除</button>`:''}
+      ${s?`<button class="btn btn-sec" onclick="goMap('${sid}')">🗺 マップ</button>`:''}
+      <button class="btn btn-prim" id="em-save" onclick="emSave()">保存</button>
+    </div>
+    ${ev&&st==='plan'&&ev.held<=Date.now()?`<button class="btn btn-prim" style="width:100%;justify-content:center;margin-top:8px;background:var(--event);border-color:var(--event)" onclick="emMarkDone()">✅ 実施済にする（マップに反映）</button>`:''}`;
+  document.getElementById('ev-modal').classList.remove('hidden');
+  emUpdate();
+}
+function emMarkDone(){
+  document.querySelector('input[name=em-st][value=done]').checked=true;
+  emSave();
+}
+function hideEvModal(){ document.getElementById('ev-modal').classList.add('hidden'); emCur=null; }
+function emRead(){
+  const s=storeByKey(document.getElementById('em-store').value);
+  const dv=document.getElementById('em-date').value;
+  const held=dv?new Date(dv+'T00:00:00').getTime():NaN;
+  let st=document.querySelector('input[name=em-st]:checked')?.value||'plan';
+  return{s,held,st,memo:document.getElementById('em-memo').value.trim()};
+}
+function emUpdate(){
+  const{s,held,st}=emRead();
+  const future=!isNaN(held)&&held>dayStart();
+  // 未来の日付は「予定」のみ
+  const doneIn=document.querySelector('input[name=em-st][value=done]');
+  doneIn.disabled=future;
+  if(future&&st==='done') document.querySelector('input[name=em-st][value=plan]').checked=true;
+  const cur=document.querySelector('input[name=em-st]:checked').value;
+  document.getElementById('em-l-plan').className=cur==='plan'?'on-plan':'';
+  document.getElementById('em-l-done').className=(cur==='done'?'on-done':'')+(future?' dis':'');
+  document.getElementById('em-hint').textContent=cur==='plan'
+    ?'予定はカレンダーだけに表示され、マップには反映されません。実施後に「実施済」に切り替えてください。'
+    :'実施済にすると、マップの商圏に反映されます（3か月間）。';
+  // 商圏の重複チェック（その日時点）
+  let w='';
+  if(s&&!isNaN(held)){
+    const r=statusAt(s.id,held,emCur?.id);
+    if(r.st==='ev') w=`⚠ この日はまだ商圏が復活していません（${fmt(r.ev.held)} 実施 → 復活 ${fmt(r.ev.exp)}）`;
+    else if(r.st==='re') w=`⚠ この日は商圏が重複しています：<b>${esc(r.by.n)}</b>（${fmt(r.ev.held)} 実施 → 解除 ${fmt(r.ev.exp)}）`;
+    const others=plansOf(s.id).filter(p=>p.id!==emCur?.id);
+    if(others.length) w+=(w?'<br>':'')+`📅 この店舗には他に予定があります：${others.map(p=>fmtMD(p.held)).join('、')}`;
+  }
+  document.getElementById('em-warn').innerHTML=w?`<div class="em-warn">${w}</div>`:'';
+}
+function emSave(){
+  const{s,held,st,memo}=emRead();
+  if(!s){ toast('⚠ 店舗を候補から選んでください'); return; }
+  if(isNaN(held)){ toast('⚠ 日付を入力してください'); return; }
+  if(st==='done'&&held>Date.now()){ toast('⚠ 未来の日付は実施済にできません'); return; }
+  const id=emCur?.id||genId();
+  const prev=E[id]||{};
+  const d={...prev,id,sid:s.id,held,exp:addM(held,3),st,memo,by:prev.by||authUser?.email||''};
+  E[id]=d;
+  if(db) db.doc(`events/${id}`).set(d).catch(()=>{});else saveL();
+  hideEvModal();
+  render();
+  toast(st==='plan'?`📅 ${s.n} の予定を保存しました（${fmt(held)}）`:`✅ ${s.n} の実施を保存しました（${fmt(held)}）`);
+}
+function emDelete(){
+  const id=emCur?.id; if(!id||!E[id]) return;
+  const ev=E[id];
+  if(!confirm(`${S[ev.sid]?.n||''} の${ev.st==='plan'?'予定':'実施記録'}（${fmt(ev.held)}）を削除しますか？`)) return;
+  delete E[id];
+  if(db) db.doc(`events/${id}`).delete().catch(()=>{});else saveL();
+  hideEvModal();
+  render();
+  toast('🗑 削除しました');
+}
+function goMap(sid){
+  hideEvModal();
+  setView('map');
+  setTimeout(()=>sel(sid),50);
+}
+
 /* ===== DB 初期化 & 起動 ===== */
 (async()=>{
+  try{ if(localStorage.getItem('mg_view')==='cal') setView('cal'); }catch(e){}
   // 店舗データはRAWから同期構築済みなので、DB読み込みを待たずに即座に初期描画する
   fitAll();
   render();
