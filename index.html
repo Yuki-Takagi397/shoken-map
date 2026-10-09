@@ -78,7 +78,7 @@ body[data-view=cal] #cal{display:flex}
 .cs-hd:first-child{margin-top:0}
 .cs-item{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;cursor:pointer;border:1px solid var(--border);margin-bottom:5px}
 .cs-item:hover{background:var(--surface2)}
-.cs-date{font-size:11px;font-weight:700;min-width:46px;font-variant-numeric:tabular-nums}
+.cs-date{font-size:11px;font-weight:700;min-width:46px;max-width:110px;font-variant-numeric:tabular-nums}
 .cs-body{flex:1;min-width:0}
 .cs-nm{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cs-memo{font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -94,6 +94,13 @@ body[data-view=cal] #cal{display:flex}
 .em-warn{font-size:10px;line-height:1.6;border-radius:7px;padding:7px 9px;margin-top:8px;background:rgba(217,119,6,.08);border:1px solid rgba(217,119,6,.25);color:#B45309}
 .em-ro{font-size:12px;line-height:1.8}
 textarea.f-inp{resize:vertical;min-height:52px}
+.em-dates{display:flex;flex-direction:column;gap:5px}
+.em-drow{display:flex;gap:5px;align-items:center}
+.em-drow .f-inp{flex:1}
+.em-drow .btn{padding:6px 9px;flex-shrink:0}
+.em-dadd{display:flex;gap:5px;margin-top:6px}
+.em-dadd .btn{flex:1;justify-content:center}
+.ce-i{opacity:.75;font-size:9px;margin-left:3px}
 /* 店舗詳細の予定一覧 */
 .dp-list{display:flex;flex-direction:column;gap:4px;margin-top:4px}
 .dp-item{font-size:10px;padding:5px 7px;border-radius:6px;background:rgba(37,99,235,.07);color:#1D4ED8;cursor:pointer;border:1px dashed rgba(37,99,235,.4)}
@@ -622,9 +629,9 @@ RAW.forEach((r,i)=>{
 // 予定（st:'plan'）は商圏に反映しない。実施済（st:'done'、旧データは st なし）のみ反映
 const isDone=ev=>ev.st!=='plan';
 // 日時 ts 時点での店舗の状態（excludeId のイベントは除外）
-function statusAt(id,ts,excludeId){
+function statusAt(id,ts,excl){
   const s=S[id];if(!s)return{st:'ok'};
-  const act=Object.values(E).filter(ev=>isDone(ev)&&ev.id!==excludeId&&ev.held<=ts&&ev.exp>ts);
+  const act=Object.values(E).filter(ev=>isDone(ev)&&!(excl&&excl.has(ev.id))&&ev.held<=ts&&ev.exp>ts);
   for(const ev of act) if(ev.sid===id) return{st:'ev',ev};
   if(s.lat!=null) for(const ev of act){
     const es=S[ev.sid];if(!es||ev.sid===id||es.lat==null) continue;
@@ -638,6 +645,26 @@ const plansOf=id=>Object.values(E).filter(ev=>ev.st==='plan'&&ev.sid===id).sort(
 const dayStart=(ts=Date.now())=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime()};
 const fmtMD=ts=>{const d=new Date(ts);return`${d.getMonth()+1}/${d.getDate()}`};
 const WD='日月火水木金土';
+// 複数日程：同じ grp を持つイベントを1つの予定として扱う（旧データは単独）
+const grpKey=ev=>ev.grp||ev.id;
+const groupOf=ev=>Object.values(E).filter(x=>grpKey(x)===grpKey(ev)).sort((a,b)=>a.held-b.held);
+function groups(fn){
+  const m={};
+  for(const ev of Object.values(E)) if(fn(ev)) (m[grpKey(ev)]=m[grpKey(ev)]||[]).push(ev);
+  return Object.values(m).map(a=>a.sort((x,y)=>x.held-y.held));
+}
+// 日付リストを「10/16〜10/18、10/20」の形にまとめる
+function fmtDates(ts){
+  const ds=[...new Set(ts.map(t=>dayStart(t)))].sort((a,b)=>a-b);
+  const out=[];
+  for(let i=0;i<ds.length;){
+    let j=i;
+    while(j+1<ds.length&&Math.round((ds[j+1]-ds[j])/86400000)===1) j++;
+    out.push(j>i?`${fmtMD(ds[i])}〜${fmtMD(ds[j])}`:fmtMD(ds[i]));
+    i=j+1;
+  }
+  return out.join('、');
+}
 const fmtW=ts=>`${fmt(ts)}（${WD[new Date(ts).getDay()]}）`;
 function col(id,st){
   const s=S[id];if(!s)return'#94A3B8';
@@ -890,8 +917,8 @@ function showDetail(id){
     else if(st==='re') chips.push('<span class="chip chip-re">制限中</span>');
     else chips.push('<span class="chip chip-ok">実施可能</span>');
   } else chips.push('<span class="chip chip-ng">位置未取得</span>');
-  const pls=plansOf(id);
-  if(pls.length) chips.push(`<span class="chip chip-pl">📅 予定 ${pls.length}件</span>`);
+  const pgs=groups(ev=>ev.st==='plan'&&ev.sid===id).sort((a,b)=>a[0].held-b[0].held);
+  if(pgs.length) chips.push(`<span class="chip chip-pl">📅 予定 ${pgs.length}件</span>`);
   document.getElementById('d-chips').innerHTML=chips.join('');
   let info='';
   if(st==='ev'&&ev) info=`<div class="info-box ib-ev">✅ 直近でイベント実施済<br>実施日：${fmt(ev.held)}<br>商圏復活日：${fmt(ev.exp)}</div>`;
@@ -929,8 +956,9 @@ function showDetail(id){
   // 予定（カレンダーと共通）
   const today0=dayStart();
   let ph='';
-  if(pls.length||isOwner) ph+='<div class="dl" style="margin-top:10px">予定</div>';
-  if(pls.length) ph+='<div class="dp-list">'+pls.map(p=>`<div class="dp-item${p.held<today0?' late':''}" onclick="openEvModal({id:'${p.id}'})">📅 ${fmtW(p.held)}${p.held<today0?' ・実施報告待ち':''}${p.memo?'<br>'+esc(p.memo):''}</div>`).join('')+'</div>';
+  if(pgs.length||isOwner) ph+='<div class="dl" style="margin-top:10px">予定</div>';
+  if(pgs.length) ph+='<div class="dp-list">'+pgs.map(g=>{const late=g[g.length-1].held<today0;
+    return `<div class="dp-item${late?' late':''}" onclick="openEvModal({id:'${g[0].id}'})">📅 ${g.length>1?`${fmtDates(g.map(x=>x.held))}（${g.length}日間）`:fmtW(g[0].held)}${late?' ・実施報告待ち':''}${g[0].memo?'<br>'+esc(g[0].memo):''}</div>`;}).join('')+'</div>';
   if(isOwner&&s.a) ph+=`<button class="btn btn-sec" style="width:100%;justify-content:center;margin-top:6px" onclick="openEvModal({sid:'${id}',st:'plan'})">📅 予定を登録</button>`;
   act.insertAdjacentHTML('beforeend',ph);
   document.getElementById('detail').classList.add('open');
@@ -1250,9 +1278,11 @@ function calMove(d){
 }
 function evChip(ev,today0){
   const s=S[ev.sid]; const nm=s?s.n:'（削除された店舗）';
-  const cls=ev.st==='plan'?('plan'+(ev.held<today0?' late':'')):'done';
+  const cls=ev.st==='plan'?('plan'+(groupOf(ev).at(-1).held<today0?' late':'')):'done';
   const lbl=ev.st==='plan'?'予定':'実施';
-  return `<div class="ce ${cls}" title="${esc(nm)}${ev.memo?' — '+esc(ev.memo):''}" onclick="event.stopPropagation();openEvModal({id:'${ev.id}'})"><span class="ce-l">${lbl}｜</span>${esc(nm)}</div>`;
+  const g=groupOf(ev);
+  const idx=g.length>1?`<span class="ce-i">${g.indexOf(ev)+1}/${g.length}</span>`:'';
+  return `<div class="ce ${cls}" title="${esc(nm)}${ev.memo?' — '+esc(ev.memo):''}" onclick="event.stopPropagation();openEvModal({id:'${ev.id}'})"><span class="ce-l">${lbl}｜</span>${esc(nm)}${idx}</div>`;
 }
 function renderCal(){
   document.getElementById('cal-ym').textContent=`${calY}年${calM+1}月`;
@@ -1281,10 +1311,13 @@ function renderCal(){
   }
   grid.innerHTML=h;
   // サイドパネル：実施報告待ち・今後の予定・直近の実施
-  const plans=Object.values(E).filter(ev=>ev.st==='plan').sort((a,b)=>a.held-b.held);
-  const late=plans.filter(p=>p.held<today0), upcoming=plans.filter(p=>p.held>=today0);
-  const done=Object.values(E).filter(ev=>isDone(ev)).sort((a,b)=>b.held-a.held).slice(0,10);
-  const item=(ev,extra='')=>`<div class="cs-item ${extra}" onclick="openEvModal({id:'${ev.id}'})"><div class="cs-date">${fmtMD(ev.held)}<span style="font-weight:400;color:var(--text3)">（${WD[new Date(ev.held).getDay()]}）</span></div><div class="cs-body"><div class="cs-nm">${esc(S[ev.sid]?.n||'（削除された店舗）')}</div>${ev.memo?`<div class="cs-memo">${esc(ev.memo)}</div>`:''}</div></div>`;
+  const plans=groups(ev=>ev.st==='plan').sort((a,b)=>a[0].held-b[0].held);
+  const late=plans.filter(g=>g.at(-1).held<today0), upcoming=plans.filter(g=>g.at(-1).held>=today0);
+  const done=groups(ev=>isDone(ev)).sort((a,b)=>b.at(-1).held-a.at(-1).held).slice(0,10);
+  const item=(g,extra='')=>{const ev=g[0];
+    const dt=g.length>1?`${fmtDates(g.map(x=>x.held))}<div style="font-weight:400;color:var(--text3)">${g.length}日間</div>`
+      :`${fmtMD(ev.held)}<span style="font-weight:400;color:var(--text3)">（${WD[new Date(ev.held).getDay()]}）</span>`;
+    return `<div class="cs-item ${extra}" onclick="openEvModal({id:'${ev.id}'})"><div class="cs-date">${dt}</div><div class="cs-body"><div class="cs-nm">${esc(S[ev.sid]?.n||'（削除された店舗）')}</div>${ev.memo?`<div class="cs-memo">${esc(ev.memo)}</div>`:''}</div></div>`;};
   let sh='';
   if(late.length) sh+=`<div class="cs-hd">⚠ 実施報告待ち（${late.length}）</div>`+late.map(p=>item(p,'cs-late')).join('');
   sh+=`<div class="cs-hd">📅 今後の予定（${upcoming.length}）</div>`+(upcoming.length?upcoming.map(p=>item(p)).join(''):'<div class="cs-empty">予定はありません</div>');
@@ -1311,19 +1344,22 @@ function openEvModal(opts){
   const ev=opts.id?E[opts.id]:null;
   if(opts.id&&!ev){ toast('⚠ この予定は削除されています'); return; }
   const today0=dayStart();
+  const g=ev?groupOf(ev):null;
   const st=ev?(ev.st==='plan'?'plan':'done'):(opts.st||((opts.date??today0+86400000)>today0?'plan':'done'));
-  const date=ev?ev.held:(opts.date??(st==='plan'?today0+86400000:today0));
+  const dates=g?g.map(x=>x.held):[opts.date??(st==='plan'?today0+86400000:today0)];
   const sid=ev?ev.sid:(opts.sid||'');
-  emCur={id:ev?.id||null, origSt:ev?st:null};
+  emCur=g?{gid:grpKey(ev),ids:g.map(x=>x.id)}:{gid:null,ids:[]};
   const s=S[sid];
   const body=document.getElementById('ev-modal-body');
+  const last=dates[dates.length-1];
+  const dateTxt=dates.length>1?`${fmtDates(dates)}（${dates.length}日間）`:fmtW(dates[0]);
   // 閲覧のみ
   if(!isOwner){
     if(!ev) return;
     body.innerHTML=`
       <div class="modal-hd"><span>${st==='plan'?'📅 予定':'✅ 実施記録'}</span><button class="modal-x" onclick="hideEvModal()">×</button></div>
-      <div class="em-ro"><b>${esc(s?.n||'（削除された店舗）')}</b><br>${fmtW(ev.held)}${st==='plan'&&ev.held<today0?' ・実施報告待ち':''}
-      ${st==='done'?`<br>商圏復活日：${fmt(ev.exp)}`:''}${ev.memo?`<br>メモ：${esc(ev.memo)}`:''}</div>
+      <div class="em-ro"><b>${esc(s?.n||'（削除された店舗）')}</b><br>${dateTxt}${st==='plan'&&last<today0?' ・実施報告待ち':''}
+      ${st==='done'?`<br>商圏復活日：${fmt(addM(last,3))}`:''}${ev.memo?`<br>メモ：${esc(ev.memo)}`:''}</div>
       <div class="modal-ftr">${s?`<button class="btn btn-sec" onclick="goMap('${sid}')">🗺 マップで見る</button>`:''}<button class="btn btn-sec" onclick="hideEvModal()">閉じる</button></div>`;
     document.getElementById('ev-modal').classList.remove('hidden');
     return;
@@ -1335,11 +1371,15 @@ function openEvModal(opts){
     <div class="modal-hd"><span>${ev?(st==='plan'?'📅 予定の編集':'✅ 実施記録の編集'):'＋ 予定・実施の登録'}</span><button class="modal-x" onclick="hideEvModal()">×</button></div>
     <div class="f-row">
       <label class="f-lbl">店舗 <span style="color:var(--event)">*</span></label>
-      <input class="f-inp" id="em-store" list="store-names" placeholder="店舗名を入力して選択" value="${s?esc(storeKey(s)):''}" ${opts.sid||ev?'':'autofocus'} oninput="emUpdate()">
+      <input class="f-inp" id="em-store" list="store-names" placeholder="店舗名を入力して選択" value="${s?esc(storeKey(s)):''}" oninput="emUpdate()">
     </div>
     <div class="f-row">
-      <label class="f-lbl">日付</label>
-      <input class="f-inp" id="em-date" type="date" value="${dateVal(date)}" oninput="emUpdate()">
+      <label class="f-lbl">日程（複数可）</label>
+      <div class="em-dates" id="em-dates"></div>
+      <div class="em-dadd">
+        <button class="btn btn-sec" onclick="emAddDate(1)">＋ 翌日を追加</button>
+        <button class="btn btn-sec" onclick="emAddDate(0)">＋ 日程を追加</button>
+      </div>
     </div>
     <div class="f-row">
       <label class="f-lbl">種別</label>
@@ -1359,8 +1399,27 @@ function openEvModal(opts){
       ${s?`<button class="btn btn-sec" onclick="goMap('${sid}')">🗺 マップ</button>`:''}
       <button class="btn btn-prim" id="em-save" onclick="emSave()">保存</button>
     </div>
-    ${ev&&st==='plan'&&ev.held<=Date.now()?`<button class="btn btn-prim" style="width:100%;justify-content:center;margin-top:8px;background:var(--event);border-color:var(--event)" onclick="emMarkDone()">✅ 実施済にする（マップに反映）</button>`:''}`;
+    ${ev&&st==='plan'&&last<=Date.now()?`<button class="btn btn-prim" style="width:100%;justify-content:center;margin-top:8px;background:var(--event);border-color:var(--event)" onclick="emMarkDone()">✅ 実施済にする（マップに反映）</button>`:''}`;
+  for(const d of dates) emDateRow(d);
   document.getElementById('ev-modal').classList.remove('hidden');
+  emUpdate();
+}
+function emDateRow(ts){
+  const row=document.createElement('div');
+  row.className='em-drow';
+  row.innerHTML=`<input class="f-inp em-d" type="date" value="${ts!=null?dateVal(ts):''}" oninput="emUpdate()"><button class="btn btn-sec" title="この日程を削除" onclick="emDelDate(this)">×</button>`;
+  document.getElementById('em-dates').appendChild(row);
+}
+// next=1：最後の日程の翌日を追加 / 0：空欄を追加して日付を選んでもらう
+function emAddDate(next){
+  const ds=emRead().dates;
+  if(next&&ds.length) emDateRow(ds[ds.length-1]+86400000);
+  else { emDateRow(null); const ins=document.querySelectorAll('.em-d'); const el=ins[ins.length-1]; el.focus(); try{el.showPicker();}catch(e){} }
+  emUpdate();
+}
+function emDelDate(btn){
+  if(document.querySelectorAll('.em-drow').length<=1){ toast('⚠ 日程は1つ以上必要です'); return; }
+  btn.parentElement.remove();
   emUpdate();
 }
 function emMarkDone(){
@@ -1370,15 +1429,15 @@ function emMarkDone(){
 function hideEvModal(){ document.getElementById('ev-modal').classList.add('hidden'); emCur=null; }
 function emRead(){
   const s=storeByKey(document.getElementById('em-store').value);
-  const dv=document.getElementById('em-date').value;
-  const held=dv?new Date(dv+'T00:00:00').getTime():NaN;
-  let st=document.querySelector('input[name=em-st]:checked')?.value||'plan';
-  return{s,held,st,memo:document.getElementById('em-memo').value.trim()};
+  const dates=[...new Set([...document.querySelectorAll('.em-d')].map(i=>i.value).filter(Boolean)
+    .map(v=>new Date(v+'T00:00:00').getTime()).filter(t=>!isNaN(t)))].sort((a,b)=>a-b);
+  const st=document.querySelector('input[name=em-st]:checked')?.value||'plan';
+  return{s,dates,st,memo:document.getElementById('em-memo').value.trim()};
 }
 function emUpdate(){
-  const{s,held,st}=emRead();
-  const future=!isNaN(held)&&held>dayStart();
-  // 未来の日付は「予定」のみ
+  const{s,dates,st}=emRead();
+  const future=dates.some(t=>t>dayStart());
+  // 未来の日付を含む場合は「予定」のみ
   const doneIn=document.querySelector('input[name=em-st][value=done]');
   doneIn.disabled=future;
   if(future&&st==='done') document.querySelector('input[name=em-st][value=plan]').checked=true;
@@ -1386,39 +1445,64 @@ function emUpdate(){
   document.getElementById('em-l-plan').className=cur==='plan'?'on-plan':'';
   document.getElementById('em-l-done').className=(cur==='done'?'on-done':'')+(future?' dis':'');
   document.getElementById('em-hint').textContent=cur==='plan'
-    ?'予定はカレンダーだけに表示され、マップには反映されません。実施後に「実施済」に切り替えてください。'
-    :'実施済にすると、マップの商圏に反映されます（3か月間）。';
-  // 商圏の重複チェック（その日時点）
-  let w='';
-  if(s&&!isNaN(held)){
-    const r=statusAt(s.id,held,emCur?.id);
-    if(r.st==='ev') w=`⚠ この日はまだ商圏が復活していません（${fmt(r.ev.held)} 実施 → 復活 ${fmt(r.ev.exp)}）`;
-    else if(r.st==='re') w=`⚠ この日は商圏が重複しています：<b>${esc(r.by.n)}</b>（${fmt(r.ev.held)} 実施 → 解除 ${fmt(r.ev.exp)}）`;
-    const others=plansOf(s.id).filter(p=>p.id!==emCur?.id);
-    if(others.length) w+=(w?'<br>':'')+`📅 この店舗には他に予定があります：${others.map(p=>fmtMD(p.held)).join('、')}`;
+    ?'予定はカレンダーだけに表示され、マップには反映されません。全日程の終了後に「実施済」に切り替えてください。'
+    :'実施済にすると、マップの商圏に反映されます（最終日から3か月間）。';
+  // 商圏の重複チェック（各日程の時点）
+  const msgs=[];
+  if(s&&dates.length){
+    const excl=new Set(emCur?.ids||[]);
+    const byMsg={};
+    for(const t of dates){
+      const r=statusAt(s.id,t,excl);
+      let m='';
+      if(r.st==='ev') m=`まだ商圏が復活していません（${fmt(r.ev.held)} 実施 → 復活 ${fmt(r.ev.exp)}）`;
+      else if(r.st==='re') m=`商圏が重複しています：<b>${esc(r.by.n)}</b>（${fmt(r.ev.held)} 実施 → 解除 ${fmt(r.ev.exp)}）`;
+      if(m) (byMsg[m]=byMsg[m]||[]).push(t);
+    }
+    for(const[m,ts] of Object.entries(byMsg)) msgs.push(`⚠ ${fmtDates(ts)}：${m}`);
+    const others=groups(ev=>ev.st==='plan'&&ev.sid===s.id&&!excl.has(ev.id));
+    if(others.length) msgs.push(`📅 この店舗には他に予定があります：${others.map(g=>fmtDates(g.map(x=>x.held))).join(' ／ ')}`);
   }
-  document.getElementById('em-warn').innerHTML=w?`<div class="em-warn">${w}</div>`:'';
+  document.getElementById('em-warn').innerHTML=msgs.length?`<div class="em-warn">${msgs.join('<br>')}</div>`:'';
 }
 function emSave(){
-  const{s,held,st,memo}=emRead();
+  const{s,dates,st,memo}=emRead();
   if(!s){ toast('⚠ 店舗を候補から選んでください'); return; }
-  if(isNaN(held)){ toast('⚠ 日付を入力してください'); return; }
-  if(st==='done'&&held>Date.now()){ toast('⚠ 未来の日付は実施済にできません'); return; }
-  const id=emCur?.id||genId();
-  const prev=E[id]||{};
-  const d={...prev,id,sid:s.id,held,exp:addM(held,3),st,memo,by:prev.by||authUser?.email||''};
-  E[id]=d;
-  if(db) db.doc(`events/${id}`).set(d).catch(()=>{});else saveL();
+  if(!dates.length){ toast('⚠ 日付を入力してください'); return; }
+  if(st==='done'&&dates.some(t=>t>Date.now())){ toast('⚠ 未来の日付は実施済にできません'); return; }
+  const gid=emCur?.gid||genId();
+  const old=(emCur?.ids||[]).map(id=>E[id]).filter(Boolean);
+  const by=old[0]?.by||authUser?.email||'';
+  const used=new Set();
+  for(const held of dates){
+    // 同じ日付の既存レコードはIDを引き継ぐ
+    const keep=old.find(o=>!used.has(o.id)&&dayStart(o.held)===held);
+    const id=keep?.id||genId();
+    used.add(id);
+    const d={...(keep||{}),id,sid:s.id,held,exp:addM(held,3),st,memo,by,grp:gid};
+    E[id]=d;
+    if(db) db.doc(`events/${id}`).set(d).catch(()=>{});
+  }
+  for(const o of old) if(!used.has(o.id)){
+    delete E[o.id];
+    if(db) db.doc(`events/${o.id}`).delete().catch(()=>{});
+  }
+  if(!db) saveL();
   hideEvModal();
   render();
-  toast(st==='plan'?`📅 ${s.n} の予定を保存しました（${fmt(held)}）`:`✅ ${s.n} の実施を保存しました（${fmt(held)}）`);
+  const dt=dates.length>1?`${fmtDates(dates)}・${dates.length}日間`:fmt(dates[0]);
+  toast(st==='plan'?`📅 ${s.n} の予定を保存しました（${dt}）`:`✅ ${s.n} の実施を保存しました（${dt}）`);
 }
 function emDelete(){
-  const id=emCur?.id; if(!id||!E[id]) return;
-  const ev=E[id];
-  if(!confirm(`${S[ev.sid]?.n||''} の${ev.st==='plan'?'予定':'実施記録'}（${fmt(ev.held)}）を削除しますか？`)) return;
-  delete E[id];
-  if(db) db.doc(`events/${id}`).delete().catch(()=>{});else saveL();
+  const ids=(emCur?.ids||[]).filter(id=>E[id]); if(!ids.length) return;
+  const ev=E[ids[0]];
+  const dt=ids.length>1?`${fmtDates(ids.map(id=>E[id].held))}・${ids.length}日間`:fmt(ev.held);
+  if(!confirm(`${S[ev.sid]?.n||''} の${ev.st==='plan'?'予定':'実施記録'}（${dt}）を削除しますか？`)) return;
+  for(const id of ids){
+    delete E[id];
+    if(db) db.doc(`events/${id}`).delete().catch(()=>{});
+  }
+  if(!db) saveL();
   hideEvModal();
   render();
   toast('🗑 削除しました');
