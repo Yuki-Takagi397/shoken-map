@@ -1,0 +1,1661 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>商圏マッピング — MYGOL</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/dist/pmtiles.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Schibsted+Grotesk:ital,wght@0,600;0,800;1,700&display=swap">
+<style>
+/* ===== Design tokens（レイアウト・デザインガイド準拠／ライト固定） ===== */
+:root{
+  color-scheme:light;
+  --yellow:#FCE62F; --yellow2:#EADA58; --gold:#E6CE06; --orange:#FAAC2D;
+  --ink:#212020; --black:#1F1F1F; --white:#FFFFFF;
+  --gray:#F5F5F5; --gray2:#EDEDED; --line:#E5E5E5; --line2:#D8D8D8;
+  --muted:#6B6969; --muted2:#959595;
+  --grad:linear-gradient(120deg,#FCE62F,#EADA58);
+  --ok:#1F7A45; --ok-soft:#E1F3E8;
+  --bad:#C2361F; --bad-soft:#FCE4DE;
+  --info:#7A6400; --info-soft:#FFF7C2;
+  --warn:#9A5A05; --warn-soft:#FEEBCB;
+  --hover:#FFFCE6;
+  --f-body:"Noto Sans JP","Hiragino Kaku Gothic ProN","Hiragino Sans",system-ui,sans-serif;
+  --f-en:"Schibsted Grotesk","Noto Sans JP",system-ui,sans-serif;
+  --radius-pill:999px; --radius-card:16px; --radius-input:10px;
+  --header-h:72px; --side-w:236px; --content-max:1180px;
+  /* 地図・店舗ステータスの色（マーカー・凡例・一覧で共通） */
+  --fit:#1F7A45; --range:#2F6FDB; --event:#C2361F; --restr:#E08A00;
+  /* 旧名の互換（JS内のインラインスタイルで使用） */
+  --text:var(--ink); --text2:var(--muted); --text3:var(--muted2);
+  --border:var(--line); --surface:var(--white); --surface2:var(--gray); --bg:var(--white);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--f-body);font-size:14px;line-height:1.75;color:var(--ink);background:var(--white);overflow:hidden}
+button,input,select,textarea{font-family:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+.en{font-family:var(--f-en);font-variant-numeric:tabular-nums}
+
+/* ===== 1. 全体レイアウト ===== */
+#hdr{position:fixed;top:0;left:0;right:0;height:var(--header-h);display:flex;align-items:center;gap:16px;padding:0 24px;background:var(--white);border-bottom:1px solid var(--line);z-index:40}
+#side{position:fixed;top:var(--header-h);left:0;bottom:0;width:var(--side-w);background:var(--gray);padding:22px 14px;overflow-y:auto;display:flex;flex-direction:column;z-index:30}
+#main{position:fixed;top:var(--header-h);left:var(--side-w);right:0;bottom:0;overflow-y:auto}
+.view{max-width:var(--content-max);margin:0 auto;padding:30px 36px 72px;display:flex;flex-direction:column;gap:24px}
+/* マップは画面いっぱいに使う（見出し＋地図カードで高さを埋める） */
+#view-map{max-width:none;height:100%;padding-bottom:24px;min-height:620px}
+body[data-view=cal] #view-map,body[data-view=map] #cal{display:none!important}
+
+/* ===== 2. ヘッダー ===== */
+.hdr-logo{height:38px;width:38px;border-radius:12px;background:var(--grad);border:1px solid var(--gold);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hdr-logo svg{width:22px;height:22px}
+.hdr-sep{width:1px;height:32px;background:var(--line)}
+.hdr-name{display:flex;flex-direction:column;line-height:1.35}
+.hdr-name b{font-size:11px;font-weight:700}
+.hdr-name span{font-family:var(--f-en);font-size:10px;color:var(--muted2);letter-spacing:.14em;font-weight:600}
+.hdr-user{margin-left:auto;display:flex;align-items:center;gap:14px;min-width:0}
+.hdr-who{display:flex;flex-direction:column;align-items:flex-end;line-height:1.4;min-width:0}
+.auth-who{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.auth-role{font-size:11px;color:var(--muted2);white-space:nowrap}
+
+/* ===== 3. 左サイドメニュー ===== */
+.side-grp{font-family:var(--f-en);font-size:10px;font-weight:800;letter-spacing:.16em;color:var(--muted2);padding:0 14px;margin:0 0 8px}
+.side-grp:not(:first-child){margin-top:20px}
+.side-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 14px;margin-bottom:4px;border:1px solid transparent;border-radius:var(--radius-pill);background:none;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;text-align:left;white-space:nowrap}
+.side-item svg{width:19px;height:19px;flex-shrink:0}
+.side-item:hover{background:var(--white);border-color:var(--line)}
+.side-item.active{background:var(--grad);border-color:var(--gold)}
+.side-badge{margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:var(--radius-pill);background:var(--black);color:var(--yellow);font-family:var(--f-en);font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.side-item.active .side-badge{background:var(--white);color:var(--black)}
+.side-badge.warn{background:var(--orange);color:var(--black)}
+.side-badge:empty{display:none}
+.side-note{margin-top:auto;padding:16px 14px 0;font-size:11px;color:var(--muted2);line-height:1.6}
+
+/* ===== 4. ページ見出し ===== */
+.page-head{display:flex;align-items:flex-end;gap:16px}
+.ph-txt{flex:1;min-width:0}
+.ph-en{font-family:var(--f-en);font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--muted2)}
+.ph-ja{display:flex;align-items:center;gap:16px;font-size:26px;font-weight:900;line-height:1.35;margin-top:2px}
+.ph-ja::after{content:"";flex:1;height:1px;background:var(--line2)}
+.ph-desc{color:var(--muted);font-size:14px;margin-top:6px;max-width:60em}
+.ph-act{flex-shrink:0;display:flex;gap:8px}
+
+/* ===== 7. 共通パーツ ===== */
+/* ボタン */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 22px;border-radius:var(--radius-pill);border:1px solid var(--black);background:var(--gray);font-size:13px;font-weight:700;line-height:1.4;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,box-shadow .15s;color:var(--ink)}
+.btn:hover{background:var(--gray2)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-sm,.auth-btn{padding:5px 14px;font-size:12px}
+.btn-prim{background:var(--grad);border-color:var(--gold);color:var(--black)}
+.btn-prim:hover{background:var(--grad);box-shadow:0 0 0 3px rgba(252,230,47,.45)}
+.btn-sec{background:var(--gray);border-color:var(--black)}
+.btn-dark{background:var(--black);border-color:var(--black);color:var(--yellow)}
+.btn-dark:hover{background:#000}
+.btn-dng{background:var(--white);border-color:var(--bad);color:var(--bad)}
+.btn-dng:hover{background:var(--bad-soft)}
+.btn-ghost{background:none;border-color:transparent;color:var(--muted)}
+.btn-ghost:hover{background:var(--gray)}
+.btn.active{background:var(--grad);border-color:var(--gold)}
+/* カード */
+.card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius-card);padding:20px}
+.card-gray{background:var(--gray);border:none}
+/* ステータスのピル */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:var(--radius-pill);font-size:12px;font-weight:700;line-height:1.6}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip-ok,.chip-f{background:var(--ok-soft);color:var(--ok)}
+.chip-r{background:#E3ECFB;color:var(--range)}
+.chip-ev{background:var(--bad-soft);color:var(--bad)}
+.chip-re{background:var(--warn-soft);color:var(--warn)}
+.chip-pl{background:var(--info-soft);color:var(--info)}
+.chip-ng{background:var(--gray);color:var(--muted);border:1px solid var(--line)}
+/* 入力フォーム */
+.f-row{margin-bottom:14px}
+.f-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.f-lbl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-bottom:5px}
+.req{font-size:10px;font-weight:700;background:var(--black);color:var(--yellow);border-radius:4px;padding:0 5px;line-height:1.7}
+.f-inp,.f-sel{width:100%;padding:9px 12px;border-radius:var(--radius-input);border:1px solid var(--line2);background:var(--white);font-size:14px;outline:none;line-height:1.5}
+.f-inp:focus,.f-sel:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(252,230,47,.5)}
+.f-hint{font-size:12px;color:var(--muted2);margin-top:5px;line-height:1.6}
+textarea.f-inp{resize:vertical;min-height:64px}
+/* トグルスイッチ（46×26、ONは黒地＋黄色のつまみ） */
+.toggle-row{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.toggle-row>label:first-child{flex:1;font-size:13px;font-weight:700}
+.toggle-pill{position:relative;width:46px;height:26px;cursor:pointer;flex-shrink:0}
+.toggle-pill input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;background:var(--line2);border-radius:var(--radius-pill);transition:background .2s}
+.toggle-pill input:checked+.toggle-track{background:var(--black)}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:20px;height:20px;background:var(--white);border-radius:50%;transition:left .2s,background .2s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.toggle-pill input:checked~.toggle-thumb{left:23px;background:var(--yellow)}
+/* トースト（下中央・黒地・黄色文字のピル） */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--black);color:var(--yellow);padding:10px 22px;border-radius:var(--radius-pill);font-size:13px;font-weight:700;z-index:9999;opacity:0;transition:all .22s;white-space:nowrap;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+#toast.on{opacity:1;transform:translateX(-50%)}
+/* モーダル */
+.modal-ov{position:fixed;inset:0;background:rgba(33,32,32,.45);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-ov.hidden{display:none}
+.modal{background:var(--white);border-radius:24px;padding:28px 28px 24px;width:440px;max-width:100%;box-shadow:0 24px 60px rgba(0,0,0,.25);max-height:calc(100vh - 32px);overflow-y:auto}
+.modal-hd{font-size:17px;font-weight:900;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.modal-x{background:var(--gray);border:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;width:32px;height:32px;border-radius:50%;flex-shrink:0}
+.modal-x:hover{background:var(--gray2);color:var(--ink)}
+.modal-ftr{display:flex;gap:8px;margin-top:20px}
+.modal-ftr .btn{flex:1}
+/* データなし */
+.cs-empty{background:var(--gray);border-radius:14px;padding:14px;text-align:center;font-size:12px;color:var(--muted2)}
+
+/* ===== 商圏マップ ===== */
+.map-card{flex:1;min-height:0;display:flex;border:1px solid var(--line);border-radius:var(--radius-card);overflow:hidden;background:var(--white)}
+#sb{width:320px;min-width:320px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--white);overflow:hidden}
+.sb-top{padding:14px 16px 0}
+.sb-sub{font-size:12px;color:var(--muted);font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:12px 16px}
+.stat{background:var(--gray);border-radius:12px;padding:8px 4px;text-align:center}
+.stat-n{font-family:var(--f-en);font-size:22px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.stat-l{font-size:9px;color:var(--muted);margin-top:3px;line-height:1.3;font-weight:700}
+.s-f .stat-n{color:var(--fit)}.s-r .stat-n{color:var(--range)}.s-e .stat-n{color:var(--event)}.s-re .stat-n{color:var(--restr)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;padding:0 16px 12px;border-bottom:1px solid var(--line)}
+.leg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+.leg-c{width:9px;height:9px;border-radius:50%;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+.leg-d{width:9px;height:9px;transform:rotate(45deg);border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+.ctrls{display:flex;gap:6px;padding:12px 16px 0}
+.ctrls .btn{flex:1}
+/* 検索バー：太い黒枠のピル */
+.search-wrap{position:relative;padding:12px 16px 0}
+.search-inp{width:100%;padding:8px 14px 8px 36px;border-radius:var(--radius-pill);border:2px solid var(--black);background:var(--white);font-size:13px;outline:none}
+.search-inp:focus{box-shadow:0 0 0 3px rgba(252,230,47,.7)}
+.search-ico{position:absolute;left:30px;top:calc(50% + 6px);transform:translateY(-50%);font-size:13px;pointer-events:none}
+/* 絞り込みチップ */
+.filter-row{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line)}
+.fchip{padding:4px 12px;border-radius:var(--radius-pill);border:1px solid var(--line2);background:var(--white);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;color:var(--ink)}
+.fchip:hover{background:var(--gray)}
+.fchip.active{background:var(--grad);border-color:var(--gold)}
+/* 店舗一覧 */
+.list-hd{padding:10px 16px 4px;font-size:11px;font-weight:700;color:var(--muted2)}
+#list{flex:1;overflow-y:auto;padding:0 8px 10px}
+#list::-webkit-scrollbar{width:4px}#list::-webkit-scrollbar-thumb{background:var(--line2);border-radius:2px}
+.si{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;cursor:pointer;user-select:none;border-bottom:1px solid var(--gray)}
+.si:hover{background:var(--hover)}
+.si.sel{background:var(--info-soft)}
+.si-mk{width:11px;height:11px;flex-shrink:0;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.2)}
+.si-mk.dot{border-radius:50%}.si-mk.dia{transform:rotate(45deg)}
+.si-body{flex:1;min-width:0;line-height:1.45}
+.si-nm{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si-mt{font-size:11px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si-r{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.si-km{font-family:var(--f-en);font-size:11px;color:var(--muted2);font-weight:600}
+.ev{padding:3px 10px;border-radius:var(--radius-pill);border:1px solid transparent;font-size:11px;font-weight:700;cursor:pointer;min-width:48px;text-align:center}
+.ev.rec{background:var(--grad);border-color:var(--gold);color:var(--black)}
+.ev.can{background:var(--white);border-color:var(--bad);color:var(--bad)}
+.ev.lock{background:var(--warn-soft);color:var(--warn);cursor:not-allowed}
+.ev.na{background:var(--gray);color:var(--muted2);cursor:default}
+/* 地図 */
+#mw{flex:1;position:relative;overflow:hidden;background:#CFE0EE;isolation:isolate}
+#map{position:absolute;inset:0;background:#CFE0EE;font-family:inherit}
+.leaflet-tooltip{font-family:var(--f-body);font-size:12px;font-weight:700;border-radius:8px}
+.leaflet-control-layers{font-family:var(--f-body);font-size:12px;border-radius:12px!important}
+.mk-wrap{background:none;border:none}
+.mk{width:100%;height:100%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45)}
+.mk.dot{border-radius:50%}
+.mk.dia{transform:rotate(45deg) scale(.85)}
+.mk.sel{box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 35%,transparent),0 2px 8px rgba(0,0,0,.5)}
+#map-btns{position:absolute;bottom:16px;right:12px;z-index:800;display:flex;flex-direction:column;gap:6px}
+.m-btn{background:var(--white);border:1px solid var(--black);border-radius:var(--radius-pill);padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12);white-space:nowrap}
+.m-btn:hover{background:var(--gray)}
+.m-btn.on{background:var(--grad);border-color:var(--gold)}
+#zoom-btns{position:absolute;bottom:40px;left:12px;z-index:800;display:flex;flex-direction:column;gap:4px}
+.z-btn{background:var(--white);border:1px solid var(--line2);border-radius:50%;width:34px;height:34px;font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;line-height:1}
+.z-btn:hover{background:var(--gray)}
+/* 店舗の詳細パネル（地図カードの右上） */
+#detail{position:absolute;top:12px;right:12px;width:300px;background:var(--white);border-radius:var(--radius-card);border:1px solid var(--line);box-shadow:0 12px 32px rgba(0,0,0,.14);z-index:1100;display:none;max-height:calc(100% - 24px);overflow-y:auto}
+#detail.open{display:block}
+#detail::-webkit-scrollbar{width:4px}#detail::-webkit-scrollbar-thumb{background:var(--line2);border-radius:2px}
+.dh{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:16px 16px 10px}
+.dh-i{flex:1;min-width:0}
+.dh-nm{font-size:17px;font-weight:900;line-height:1.4}
+.dh-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.dh-x{background:var(--gray);border:none;cursor:pointer;color:var(--muted);font-size:16px;line-height:1;width:28px;height:28px;border-radius:50%;flex-shrink:0}
+.dh-x:hover{background:var(--gray2);color:var(--ink)}
+.db{padding:4px 16px 10px;border-top:1px solid var(--line)}
+.dl{font-size:11px;font-weight:700;color:var(--muted2);margin-top:10px}
+.dv{font-size:13px;line-height:1.6}
+.info-box{border-radius:14px;padding:10px 12px;font-size:12px;line-height:1.7;margin:10px 0 2px;font-weight:500}
+.ib-ev{background:var(--bad-soft);color:var(--bad)}
+.ib-re{background:var(--warn-soft);color:var(--warn)}
+.r-row{display:flex;align-items:center;gap:6px;margin-top:4px}
+.r-in{width:72px;padding:6px 10px;border-radius:var(--radius-input);border:1px solid var(--line2);font-size:13px;font-family:var(--f-en)}
+.r-in:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(252,230,47,.5)}
+.r-row .btn{padding:5px 14px;font-size:12px}
+.da{padding:0 16px 14px}
+.da .btn-prim,.da .btn-dng,.da .btn-sec,.da .btn-dark{width:100%}
+.ev-date-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.ev-date-row label{font-size:12px;font-weight:700;white-space:nowrap}
+.ev-date-in{flex:1;padding:7px 12px;border-radius:var(--radius-input);border:1px solid var(--line2);font-size:13px;outline:none}
+.ev-date-in:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(252,230,47,.5)}
+.ea-toggle{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;padding:2px 0;font-weight:700}
+.ea-toggle:hover{color:var(--ink);text-decoration:underline}
+.ea-form{background:var(--gray);border-radius:14px;padding:12px;margin-top:8px}
+.ea-form .f-row{margin-bottom:8px}
+.ea-form .f-row-2{margin-bottom:8px}
+.ea-form .f-inp{font-size:13px;padding:7px 10px}
+.gm-links{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.gm-links a{font-size:11px;font-weight:700;color:var(--ink);text-decoration:none;padding:3px 10px;border:1px solid var(--line2);border-radius:var(--radius-pill);background:var(--white)}
+.gm-links a:hover{background:var(--hover);border-color:var(--gold)}
+.dp-list{display:flex;flex-direction:column;gap:5px;margin-top:4px}
+.dp-item{font-size:12px;padding:7px 10px;border-radius:12px;background:var(--info-soft);color:var(--info);cursor:pointer;font-weight:500;line-height:1.55}
+.dp-item:hover{box-shadow:0 0 0 1px var(--gold)}
+.dp-item.late{background:var(--warn-soft);color:var(--warn)}
+
+/* ===== カレンダー ===== */
+.cal-wrap{display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start}
+.cal-main{display:flex;flex-direction:column;gap:14px;padding:20px}
+.cal-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cal-hd .btn{padding:5px 14px;font-size:12px}
+.cal-ym{font-family:var(--f-en);font-size:22px;font-weight:800;min-width:130px;text-align:center;font-variant-numeric:tabular-nums}
+.cal-legend{margin-left:auto;display:flex;gap:8px;align-items:center}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(104px,auto);border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--line);gap:1px}
+.cal-dow{background:var(--gray);font-size:11px;font-weight:700;text-align:center;padding:6px 0;color:var(--muted)}
+.cal-dow.sun,.cd.sun .cd-n{color:var(--bad)}.cal-dow.sat,.cd.sat .cd-n{color:var(--range)}
+.cd{background:var(--white);padding:6px;display:flex;flex-direction:column;gap:3px;min-width:0;overflow:hidden}
+.cd.can-add{cursor:pointer}.cd.can-add:hover{background:var(--hover)}
+.cd.oth{background:#FAFAFA}.cd.oth .cd-n{opacity:.4}
+.cd-n{font-family:var(--f-en);font-size:12px;font-weight:800;line-height:24px;width:24px;height:24px;text-align:center;border-radius:50%;flex-shrink:0}
+.cd.tod .cd-n{background:var(--black);color:var(--yellow)!important}
+.ce{font-size:11px;font-weight:700;line-height:1.4;padding:2px 8px;border-radius:var(--radius-pill);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;flex-shrink:0}
+.ce:hover{filter:brightness(.96)}
+.ce.plan{background:var(--info-soft);color:var(--info);border:1px dashed var(--gold)}
+.ce.plan.late{background:var(--warn-soft);color:var(--warn);border-color:var(--orange)}
+.ce.done{background:var(--bad);color:var(--white);border:1px solid var(--bad)}
+.ce-i{opacity:.75;font-family:var(--f-en);font-size:10px;margin-left:4px}
+.ce-more{font-size:11px;color:var(--muted);padding-left:6px;cursor:pointer;font-weight:700}
+.ce-more:hover{text-decoration:underline}
+.cal-side{padding:20px;position:sticky;top:0}
+.cs-hd{display:flex;align-items:center;gap:6px;font-size:15px;font-weight:900;margin:22px 0 10px}
+.cs-hd:first-child{margin-top:0}
+.cs-item{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:14px;cursor:pointer;border:1px solid var(--line);margin-bottom:6px;background:var(--white)}
+.cs-item:hover{background:var(--hover);border-color:var(--gold)}
+.cs-date{font-family:var(--f-en);font-size:13px;font-weight:800;min-width:54px;max-width:120px;line-height:1.45;font-variant-numeric:tabular-nums}
+.cs-body{flex:1;min-width:0;line-height:1.5}
+.cs-nm{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-memo{font-size:11px;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-late{background:var(--warn-soft);border-color:transparent}
+.cs-late .cs-date{color:var(--warn)}
+.cs-dot{width:10px;height:10px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 3px var(--warn-soft)}
+/* 予定・実施ダイアログ */
+.em-type{display:flex;gap:8px}
+.em-type label{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border:1px solid var(--line2);border-radius:var(--radius-pill);font-size:13px;font-weight:700;cursor:pointer;color:var(--muted)}
+.em-type input{display:none}
+.em-type label.on-plan{background:var(--grad);border-color:var(--gold);color:var(--black)}
+.em-type label.on-done{background:var(--black);border-color:var(--black);color:var(--yellow)}
+.em-type label.dis{opacity:.45;cursor:not-allowed}
+.em-warn{font-size:12px;line-height:1.7;border-radius:14px;padding:10px 12px;margin-top:4px;background:var(--warn-soft);color:var(--warn)}
+.em-ro{font-size:14px;line-height:1.9}
+.em-dates{display:flex;flex-direction:column;gap:6px}
+.em-drow{display:flex;gap:6px;align-items:center}
+.em-drow .f-inp{flex:1}
+.em-drow .btn{padding:6px 12px;flex-shrink:0}
+.em-dadd{display:flex;gap:6px;margin-top:8px}
+.em-dadd .btn{flex:1;padding:5px 14px;font-size:12px}
+
+/* ===== 9. スマホ表示（幅900px以下） ===== */
+@media(max-width:900px){
+  :root{--header-h:60px}
+  body{overflow:auto}
+  #hdr{padding:0 16px;gap:10px}
+  .hdr-logo{width:28px;height:28px;border-radius:9px}
+  .hdr-logo svg{width:16px;height:16px}
+  .hdr-sep,.hdr-name,.hdr-who{display:none}
+  #side{top:var(--header-h);bottom:auto;right:0;width:auto;height:auto;flex-direction:row;gap:6px;padding:8px 16px;overflow-x:auto;border-bottom:1px solid var(--line)}
+  .side-grp,.side-note{display:none}
+  .side-item{width:auto;margin:0;padding:6px 14px;font-size:13px;background:var(--white);border-color:var(--line)}
+  #main{left:0;top:calc(var(--header-h) + 52px)}
+  .view{padding:20px 16px 72px;gap:18px}
+  .ph-ja{font-size:21px}
+  .page-head{flex-wrap:wrap;align-items:flex-start;gap:12px}
+  .ph-txt{flex-basis:100%}
+  .ph-desc{font-size:13px}
+  #view-map{height:auto;min-height:0}
+  .map-card{flex-direction:column-reverse;flex:none}
+  #sb{width:auto;min-width:0;border-right:none;border-top:1px solid var(--line);max-height:none}
+  #list{max-height:50vh}
+  #mw{height:60vh;flex:none}
+  /* 詳細は画面下からのシート */
+  #detail{position:fixed;top:auto;left:8px;right:8px;bottom:8px;width:auto;max-height:70vh;z-index:1500}
+  .cal-wrap{grid-template-columns:1fr}
+  .cal-main{padding:12px}
+  .cal-grid{grid-auto-rows:minmax(72px,auto)}
+  .cal-legend{display:none}
+  .ce{font-size:9px;padding:1px 4px}
+  .ce-l{display:none}
+  .cal-side{position:static}
+}
+</style>
+</head>
+<body data-view="map">
+
+<header id="hdr">
+  <div class="hdr-logo" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#1F1F1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
+  </div>
+  <div class="hdr-sep"></div>
+  <div class="hdr-name"><b>MYGOL 商圏マッピング</b><span>TRADE AREA MAPPING</span></div>
+  <div class="hdr-user">
+    <div class="hdr-who">
+      <span class="auth-who" id="auth-who">ゲスト</span>
+      <span class="auth-role" id="auth-role">閲覧のみ</span>
+    </div>
+    <button class="btn btn-sec auth-btn" id="auth-btn" onclick="onAuthBtn()">🔑 編集者ログイン</button>
+  </div>
+</header>
+
+<nav id="side">
+  <div class="side-grp">MENU</div>
+  <button class="side-item active" id="tab-map" onclick="setView('map')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
+    商圏マップ<span class="side-badge" id="badge-map"></span>
+  </button>
+  <button class="side-item" id="tab-cal" onclick="setView('cal')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+    カレンダー<span class="side-badge" id="badge-cal"></span>
+  </button>
+  <div class="side-note">地図：国土地理院<br>店舗の色は実施済の記録だけで決まります</div>
+</nav>
+
+<main id="main">
+<!-- ===== 商圏マップ ===== -->
+<section class="view" id="view-map">
+  <div class="page-head">
+    <div class="ph-txt">
+      <div class="ph-en">Trade Area Map</div>
+      <h1 class="ph-ja">商圏マップ</h1>
+      <p class="ph-desc">全国の店舗と商圏の状況です。実施済のイベントだけが商圏に反映されます。</p>
+    </div>
+    <div class="ph-act">
+      <button class="btn btn-prim" id="add-btn-row" style="display:none" onclick="showAddModal()">＋ 店舗を追加</button>
+    </div>
+  </div>
+
+  <div class="map-card">
+    <aside id="sb">
+      <div class="sb-top">
+        <div class="sb-sub">MYGOL グループ 全国97店舗</div>
+      </div>
+      <div class="stats">
+        <div class="stat s-f"><div class="stat-n" id="c-f">–</div><div class="stat-l">MYGOL/<br>GOLF LANE</div></div>
+        <div class="stat s-r"><div class="stat-n" id="c-r">–</div><div class="stat-l">MY GOLF<br>RANGE</div></div>
+        <div class="stat s-e"><div class="stat-n" id="c-e">–</div><div class="stat-l">実施済</div></div>
+        <div class="stat s-re"><div class="stat-n" id="c-re">–</div><div class="stat-l">制限中</div></div>
+      </div>
+      <div class="legend">
+        <span class="leg"><span class="leg-c" style="background:var(--fit)"></span>MYGOL / GOLF LANE</span>
+        <span class="leg"><span class="leg-d" style="background:var(--range)"></span>MY GOLF RANGE</span>
+        <span class="leg"><span class="leg-c" style="background:var(--event)"></span>直近実施済</span>
+        <span class="leg"><span class="leg-c" style="background:var(--restr)"></span>制限中</span>
+      </div>
+      <div class="toggle-row">
+        <label for="rng-toggle">MY GOLF RANGE を表示</label>
+        <label class="toggle-pill">
+          <input type="checkbox" id="rng-toggle" checked onchange="toggleRange(this.checked)">
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+      <div class="ctrls">
+        <button class="btn btn-sm" id="cb-btn" onclick="toggleCircles()">◎ 商圏を表示</button>
+        <button class="btn btn-sm" onclick="fitAllBtn()">⊕ 全体表示</button>
+      </div>
+      <div class="search-wrap">
+        <span class="search-ico">🔍</span>
+        <input class="search-inp" id="search-inp" type="search" placeholder="店舗名で検索" oninput="onSearch(this.value)">
+      </div>
+      <div class="filter-row">
+        <button class="fchip fc-all active" id="fc-all" onclick="setFilter(null)">すべて</button>
+        <button class="fchip fc-ok" id="fc-ok" onclick="setFilter('ok')">実施可能</button>
+        <button class="fchip fc-ev" id="fc-ev" onclick="setFilter('ev')">実施済</button>
+        <button class="fchip fc-re" id="fc-re" onclick="setFilter('re')">制限中</button>
+      </div>
+      <div class="list-hd" id="lh">読み込み中...</div>
+      <div id="list"></div>
+    </aside>
+
+    <div id="mw">
+      <div id="map"></div>
+      <div id="zoom-btns">
+        <button class="z-btn" onclick="zoom(1.3)" aria-label="拡大">+</button>
+        <button class="z-btn" onclick="zoom(1/1.3)" aria-label="縮小">−</button>
+      </div>
+      <div id="map-btns">
+        <button class="m-btn" id="mb-c" onclick="toggleCircles()">◎ 商圏</button>
+      </div>
+
+      <div id="detail">
+        <div class="dh">
+          <div class="dh-i">
+            <div class="dh-nm" id="d-nm"></div>
+            <div class="dh-chips" id="d-chips"></div>
+          </div>
+          <button class="dh-x" onclick="closeDetail()" aria-label="閉じる">×</button>
+        </div>
+        <div class="db">
+          <div id="d-info"></div>
+          <div class="dl">ブランド</div><div class="dv" id="d-br"></div>
+          <div class="dl">住所</div><div class="dv" id="d-ad"></div>
+          <div class="gm-links" id="d-gm"></div>
+          <div class="dl">エリア区分</div><div class="dv" id="d-ar"></div>
+          <div class="dl">商圏半径</div>
+          <div class="r-row">
+            <input class="r-in" type="number" id="d-rad" min="0.1" max="50" step="0.1">
+            <span style="font-size:12px;color:var(--muted2)">km</span>
+            <button class="btn btn-sec" onclick="saveRad()">更新</button>
+          </div>
+        </div>
+        <div class="da" id="d-edit-addr"></div>
+        <div class="da" id="d-act"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== カレンダー ===== -->
+<section class="view" id="cal">
+  <div class="page-head">
+    <div class="ph-txt">
+      <div class="ph-en">Calendar</div>
+      <h1 class="ph-ja">予定カレンダー</h1>
+      <p class="ph-desc">イベントの予定と実施の記録です。予定は「実施済」にするまで商圏マップには反映されません。</p>
+    </div>
+    <div class="ph-act">
+      <button class="btn btn-prim" id="cal-add" style="display:none" onclick="openEvModal({})">＋ 予定を登録</button>
+    </div>
+  </div>
+  <div class="cal-wrap">
+    <div class="card cal-main">
+      <div class="cal-hd">
+        <button class="btn btn-sec" onclick="calMove(-1)" aria-label="前の月">‹</button>
+        <div class="cal-ym" id="cal-ym"></div>
+        <button class="btn btn-sec" onclick="calMove(1)" aria-label="次の月">›</button>
+        <button class="btn btn-ghost" onclick="calMove(0)">今日</button>
+        <div class="cal-legend">
+          <span class="ce plan">予定</span>
+          <span class="ce plan late">実施報告待ち</span>
+          <span class="ce done">実施済</span>
+        </div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+    <aside class="card cal-side" id="cal-side"></aside>
+  </div>
+</section>
+</main>
+<!-- 予定・実施ダイアログ -->
+<div class="modal-ov hidden" id="ev-modal" onclick="if(event.target===this)hideEvModal()">
+  <div class="modal" id="ev-modal-body"></div>
+</div>
+<datalist id="store-names"></datalist>
+<div id="toast"></div>
+
+<!-- Login modal -->
+<div class="modal-ov hidden" id="login-modal" onclick="if(event.target===this)hideLogin()">
+  <div class="modal">
+    <div class="modal-hd">
+      <span>🔑 編集者ログイン</span>
+      <button class="modal-x" onclick="hideLogin()">×</button>
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">メールアドレス</label>
+      <input class="f-inp" id="lg-email" type="email" autocomplete="email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')sendLoginLink()">
+    </div>
+    <div class="f-hint">ログイン用のリンクをメールで送ります。届いたメールのリンクを開くとログインできます。編集できるのは、登録済みの編集者だけです。</div>
+    <div class="modal-ftr">
+      <button class="btn btn-sec" onclick="hideLogin()">キャンセル</button>
+      <button class="btn btn-prim" id="lg-send" onclick="sendLoginLink()">リンクを送信</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add store modal -->
+<div class="modal-ov hidden" id="add-modal" onclick="if(event.target===this)hideAddModal()">
+  <div class="modal">
+    <div class="modal-hd">
+      <span>＋ 新規店舗を追加</span>
+      <button class="modal-x" onclick="hideAddModal()">×</button>
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">店舗名 <span class="req">必須</span></label>
+      <input class="f-inp" id="as-name" type="text" placeholder="例：新宿西口店">
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">ブランド</label>
+      <select class="f-sel" id="as-brand">
+        <option value="MYGOL">MYGOL</option>
+        <option value="MY GOLF LANE">MY GOLF LANE</option>
+        <option value="MY GOLF RANGE">MY GOLF RANGE</option>
+      </select>
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">住所</label>
+      <input class="f-inp" id="as-addr" type="text" placeholder="例：東京都新宿区西新宿1-1-1">
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">エリア区分</label>
+      <select class="f-sel" id="as-ar">
+        <option value="市街地">市街地（商圏 2km）</option>
+        <option value="郊外">郊外（商圏 5km）</option>
+      </select>
+    </div>
+    <div class="f-row-2">
+      <div>
+        <label class="f-lbl">緯度</label>
+        <input class="f-inp" id="as-lat" type="number" step="any" placeholder="例：35.6896">
+      </div>
+      <div>
+        <label class="f-lbl">経度</label>
+        <input class="f-inp" id="as-lng" type="number" step="any" placeholder="例：139.6922">
+      </div>
+    </div>
+    <button class="btn btn-sec" style="width:100%;justify-content:center;margin-bottom:6px" onclick="geocodeInto('as-addr','as-lat','as-lng')">📍 住所から緯度・経度を取得</button>
+    <div class="f-hint">緯度・経度は省略可能です。後から住所編集で追加できます。</div>
+    <div class="modal-ftr">
+      <button class="btn btn-sec" onclick="hideAddModal()">キャンセル</button>
+      <button class="btn btn-prim" onclick="addStore()">追加する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+const COORDS={"赤坂1st店":[35.6719,139.7373],"代官山店":[35.6481,139.7037],"赤坂2nd店":[35.6719,139.7373],"福岡けやき通り店":[33.5803,130.3921],"浅草店":[35.7147,139.7967],"六本木店":[35.656,139.7319],"恵比寿店":[35.6468,139.7102],"恵比寿西店":[35.6489,139.7033],"表参道店":[35.6677,139.7122],"川崎港町駅前店":[35.5384,139.7259],"ランドル高輪ゲートウェイ店":[35.6417,139.7378],"天王寺店":[34.6484,135.5152],"東門前駅前店":[35.5303,139.7148],"ライフガーデン綱島店":[35.5408,139.649],"那覇店":[26.1895,127.6802],"ブランチ博多パピヨンガーデン店":[33.5975,130.4253],"三河島駅前店":[35.7319,139.7795],"白金高輪店":[35.6398,139.7275],"小手指店":[35.8018,139.3944],"笹塚店":[35.6682,139.6827],"杉並宮前店":[35.6738,139.6267],"イオンタウン守谷店":[35.9123,139.9968],"堺市駅前店":[34.5741,135.496],"倉敷駅前店":[34.588,133.7728],"茨木市駅前店":[34.8163,135.5658],"イオンタウン蕨店":[35.8248,139.6814],"白楽駅前店":[35.4929,139.6266],"心斎橋店":[34.6724,135.5022],"八幡西店":[33.8671,130.7562],"天神南店":[33.5888,130.3982],"高輪台店":[35.6367,139.7255],"板橋大山駅前店":[35.7518,139.7095],"みよし店":[35.0744,137.0695],"田園調布店":[35.6025,139.7034],"イオン本牧店":[35.4267,139.6622],"岡山富町店":[34.6542,133.9228],"ホテルニューオータニ大阪店":[34.6888,135.5266],"日立大みか店":[36.5214,140.5813],"ブランチ茅ヶ崎店":[35.3217,139.4198],"福岡昭代店":[33.5755,130.3604],"八千代台駅前店":[35.7166,140.0685],"イオンタウン川西店":[34.8499,135.4139],"都島店":[34.708,135.5306],"フォレストモール木津川店":[34.758,135.735],"広島井口台店":[34.3827,132.4087],"稲毛ワンズモール店":[35.6344,140.0912],"幸手店":[36.0992,139.7154],"川崎野川店":[35.5843,139.6474],"郡山店":[37.3965,140.3771],"刈谷店":[34.9935,136.9965],"草加店":[35.8351,139.8023],"神戸岡本店":[34.7189,135.2832],"松江八幡店":[35.4719,133.0505],"金沢堅町通り店":[36.5613,136.6561],"東村山駅前店":[35.7548,139.4691],"深井店":[34.5472,135.4842],"熱田店":[35.1261,136.9099],"武蔵中原駅前店":[35.5789,139.6557],"佐世保店":[33.1523,129.7285],"小山店":[36.3077,139.8038],"エグゼクティブ渋谷店":[35.6628,139.6981],"平野瓜破店":[34.6266,135.5562],"北浦和駅前店":[35.8667,139.6548],"印西店":[35.8233,140.1567],"東松原店":[35.6603,139.6578],"藤が丘店":[35.1748,137.0818],"南森町店":[34.699,135.5117],"柿生駅前店":[35.5933,139.5201],"生駒店":[34.6858,135.6959],"八戸店":[40.5117,141.4884],"厚木林店":[35.4414,139.3634],"川口店":[35.8241,139.7397],"南砂町店":[35.6671,139.8219],"東大島店":[35.6769,139.8367],"MEGAドン・キホーテ豊橋店":[34.75,137.4023],"ららぽーと横浜店":[35.533,139.6183],"佐久平店":[36.25,138.4833],"堂島クロスウォーク店":[34.6941,135.4847],"越谷せんげん台駅東口店":[35.8843,139.8057],"池尻大橋店":[35.6522,139.6935],"西横浜店":[35.469,139.6207],"荻窪タウンセブンビル店":[35.7031,139.6203],"東川口店":[35.8534,139.7843],"岐阜各務原店":[35.3908,136.8577],"宝塚店":[34.7886,135.3649],"ラパーク岸和田店":[34.4599,135.3783],"広島大手町店":[34.3938,132.4588],"武蔵村山店":[35.7523,139.3821],"ヨークタウン仙台小松島店":[38.2685,140.8942],"長岡駅前店":[37.4481,138.8495],"ドン・キホーテ西宮店":[34.7356,135.345],"竹ノ塚店":[35.7823,139.7797],"日進店":null,"新宿百人町店":[35.7071,139.6974],"和歌山店":null,"府中本町店":null,"アクロスプラザ北柏店":null};
+
+const RAW=[
+  {b:'MY GOLF RANGE',n:'赤坂1st店',z:'107-0052',a:'東京都港区赤坂2-7-2 REID-C赤坂 B1F',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'代官山店',z:'150-0034',a:'東京都渋谷区代官山町7-2 EVER B1F',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'赤坂2nd店',z:'107-0052',a:'東京都港区赤坂2-7-2 REID-C赤坂2F',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'福岡けやき通り店',z:'810-0042',a:'福岡県福岡市中央区赤坂1-2-7',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'浅草店',z:'111-0032',a:'東京都台東区浅草1-10-5',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'六本木店',z:'106-0046',a:'東京都港区元麻布3-1-36',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'恵比寿店',z:'150-0013',a:'東京都渋谷区恵比寿1-32-6',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'恵比寿西店',z:'150-0021',a:'東京都渋谷区恵比寿西1-4-1',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'表参道店',z:'150-0001',a:'東京都渋谷区神宮前4-15-4',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'川崎港町駅前店',z:'210-0807',a:'神奈川県川崎市川崎区港町5-1-1',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'ランドル高輪ゲートウェイ店',z:'108-0073',a:'東京都港区三田3-9-11',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'天王寺店',z:'543-0056',a:'大阪府大阪市天王寺区堀越町12-5',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'東門前駅前店',z:'210-0818',a:'神奈川県川崎市川崎区中瀬3-23-5',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'ライフガーデン綱島店',z:'222-0001',a:'神奈川県横浜市港北区樽町3-2-28',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'那覇店',z:'901-0153',a:'沖縄県那覇市宇栄原1009-2',ar:'郊外'},
+  {b:'MY GOLF LANE',n:'ブランチ博多パピヨンガーデン店',z:'812-0044',a:'福岡県福岡市博多区千代1-2-1',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'三河島駅前店',z:'116-0014',a:'東京都荒川区東日暮里3-40-13',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'白金高輪店',z:'108-0072',a:'東京都港区白金1-26-3',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'小手指店',z:'359-1141',a:'埼玉県所沢市小手指町1-15-1',ar:'郊外'},
+  {b:'MY GOLF LANE',n:'笹塚店',z:'151-0073',a:'東京都渋谷区笹塚1-53-7',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'杉並宮前店',z:'168-0081',a:'東京都杉並区宮前5-21-34',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'イオンタウン守谷店',z:'302-0110',a:'茨城県守谷市百合ケ丘3-249-1',ar:'郊外'},
+  {b:'MY GOLF LANE',n:'堺市駅前店',z:'591-8043',a:'大阪府堺市北区北長尾町1-7-5',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'倉敷駅前店',z:'710-0814',a:'岡山県倉敷市石見町6-6',ar:'郊外'},
+  {b:'MY GOLF LANE',n:'茨木市駅前店',z:'567-0828',a:'大阪府茨木市舟木町2-25',ar:'郊外'},
+  {b:'MY GOLF LANE',n:'イオンタウン蕨店',z:'335-0002',a:'埼玉県蕨市塚越5-6-35',ar:'郊外'},
+  {b:'MY GOLF LANE',n:'白楽駅前店',z:'221-0065',a:'神奈川県横浜市神奈川区白楽100-25',ar:'市街地'},
+  {b:'MYGOL',n:'心斎橋店',z:'542-0086',a:'大阪府大阪市中央区西心斎橋1-12-11',ar:'市街地'},
+  {b:'MY GOLF LANE',n:'八幡西店',z:'807-0083',a:'福岡県北九州市八幡西区大平1-11-7',ar:'市街地'},
+  {b:'MYGOL',n:'天神南店',z:'810-0003',a:'福岡県福岡市中央区春吉1-11-36',ar:'市街地'},
+  {b:'MY GOLF RANGE',n:'高輪台店',z:'141-0022',a:'東京都品川区東五反田4-3-23',ar:'市街地'},
+  {b:'MYGOL',n:'板橋大山駅前店',z:'173-0014',a:'東京都板橋区大山東町19-3',ar:'市街地'},
+  {b:'MYGOL',n:'みよし店',z:'470-0205',a:'愛知県みよし市三好丘緑6-11-2',ar:'郊外'},
+  {b:'MYGOL',n:'田園調布店',z:'145-0071',a:'東京都大田区田園調布3-24-14',ar:'市街地'},
+  {b:'MYGOL',n:'イオン本牧店',z:'231-0821',a:'神奈川県横浜市中区本牧原8-1',ar:'市街地'},
+  {b:'MYGOL',n:'岡山富町店',z:'700-0031',a:'岡山県岡山市北区富町2-4-4',ar:'市街地'},
+  {b:'MYGOL',n:'ホテルニューオータニ大阪店',z:'540-8578',a:'大阪府大阪市中央区城見1-4-1',ar:'市街地'},
+  {b:'MYGOL',n:'日立大みか店',z:'319-1221',a:'茨城県日立市大みか町4-3-12',ar:'郊外'},
+  {b:'MYGOL',n:'ブランチ茅ヶ崎店',z:'253-0062',a:'神奈川県茅ヶ崎市浜見平3-1',ar:'郊外'},
+  {b:'MYGOL',n:'福岡昭代店',z:'814-0012',a:'福岡県福岡市早良区昭代1-2-4',ar:'市街地'},
+  {b:'MYGOL',n:'八千代台駅前店',z:'276-0031',a:'千葉県八千代市八千代台北1-1',ar:'郊外'},
+  {b:'MYGOL',n:'イオンタウン川西店',z:'666-0124',a:'兵庫県川西市多田桜木1-4-1',ar:'郊外'},
+  {b:'MYGOL',n:'都島店',z:'534-0021',a:'大阪府大阪市都島区都島本通1-2-31',ar:'市街地'},
+  {b:'MYGOL',n:'フォレストモール木津川店',z:'619-0215',a:'京都府木津川市梅美台1-1-1',ar:'郊外'},
+  {b:'MYGOL',n:'広島井口台店',z:'733-0844',a:'広島県広島市西区井口台2-1-1',ar:'市街地'},
+  {b:'MYGOL',n:'稲毛ワンズモール店',z:'263-0005',a:'千葉県千葉市稲毛区長沼町330-50',ar:'市街地'},
+  {b:'MYGOL',n:'幸手店',z:'340-0116',a:'埼玉県幸手市西1-15-31',ar:'郊外'},
+  {b:'MYGOL',n:'川崎野川店',z:'213-0029',a:'神奈川県川崎市高津区東野川2-31-11',ar:'市街地'},
+  {b:'MYGOL',n:'郡山店',z:'963-0108',a:'福島県郡山市笹川2-31-1',ar:'郊外'},
+  {b:'MYGOL',n:'刈谷店',z:'448-0853',a:'愛知県刈谷市高松町1-5-5',ar:'郊外'},
+  {b:'MYGOL',n:'草加店',z:'340-0011',a:'埼玉県草加市栄町2-8-21',ar:'郊外'},
+  {b:'MYGOL',n:'神戸岡本店',z:'658-0003',a:'兵庫県神戸市東灘区本山北町3-5-9',ar:'市街地'},
+  {b:'MYGOL',n:'松江八幡店',z:'690-0025',a:'島根県松江市八幡町14-3',ar:'郊外'},
+  {b:'MYGOL',n:'金沢堅町通り店',z:'920-0997',a:'石川県金沢市堅町86-1',ar:'郊外'},
+  {b:'MYGOL',n:'東村山駅前店',z:'189-0014',a:'東京都東村山市本町2-2-10',ar:'郊外'},
+  {b:'MYGOL',n:'深井店',z:'599-8271',a:'大阪府堺市中区深井北町557-1',ar:'市街地'},
+  {b:'MYGOL',n:'熱田店',z:'456-0061',a:'愛知県名古屋市熱田区西郊通2-4-2',ar:'市街地'},
+  {b:'MYGOL',n:'武蔵中原駅前店',z:'211-0041',a:'神奈川県川崎市中原区下小田中2-1-16',ar:'市街地'},
+  {b:'MYGOL',n:'佐世保店',z:'857-1161',a:'長崎県佐世保市大塔町1730-15',ar:'郊外'},
+  {b:'MYGOL',n:'小山店',z:'323-0807',a:'栃木県小山市城東2-32-17',ar:'郊外'},
+  {b:'MY GOLF RANGE',n:'エグゼクティブ渋谷店',z:'150-0042',a:'東京都渋谷区宇田川町25-9',ar:'市街地'},
+  {b:'MYGOL',n:'平野瓜破店',z:'547-0024',a:'大阪府大阪市平野区瓜破1-9-53',ar:'市街地'},
+  {b:'MYGOL',n:'北浦和駅前店',z:'330-0074',a:'埼玉県さいたま市浦和区北浦和4-1-5',ar:'市街地'},
+  {b:'MYGOL',n:'印西店',z:'270-1328',a:'千葉県印西市木下南2-11-2',ar:'郊外'},
+  {b:'MYGOL',n:'東松原店',z:'156-0043',a:'東京都世田谷区松原5-26-11',ar:'市街地'},
+  {b:'MYGOL',n:'藤が丘店',z:'465-0037',a:'愛知県名古屋市名東区藤香11番',ar:'市街地'},
+  {b:'MYGOL',n:'南森町店',z:'530-0041',a:'大阪府大阪市北区天神橋1-12-16',ar:'市街地'},
+  {b:'MYGOL',n:'柿生駅前店',z:'215-0021',a:'神奈川県川崎市麻生区上麻生6-9-12',ar:'市街地'},
+  {b:'MYGOL',n:'生駒店',z:'630-0131',a:'奈良県生駒市上町3406-1',ar:'郊外'},
+  {b:'MYGOL',n:'八戸店',z:'039-1166',a:'青森県八戸市根城5-13-19',ar:'郊外'},
+  {b:'MYGOL',n:'厚木林店',z:'243-0816',a:'神奈川県厚木市林5-7-7',ar:'郊外'},
+  {b:'MYGOL',n:'川口店',z:'332-0016',a:'埼玉県川口市幸町3-5-11',ar:'郊外'},
+  {b:'MYGOL',n:'南砂町店',z:'136-0076',a:'東京都江東区南砂3-4-8',ar:'市街地'},
+  {b:'MYGOL',n:'東大島店',z:'136-0074',a:'東京都江東区東砂3-30-13',ar:'市街地'},
+  {b:'MYGOL',n:'MEGAドン・キホーテ豊橋店',z:'441-8061',a:'愛知県豊橋市藤沢町141',ar:'郊外'},
+  {b:'MYGOL',n:'ららぽーと横浜店',z:'224-0053',a:'神奈川県横浜市都筑区池辺町4035-1',ar:'市街地'},
+  {b:'MYGOL',n:'佐久平店',z:'385-0022',a:'長野県佐久市岩村田1307-15',ar:'郊外'},
+  {b:'MYGOL',n:'堂島クロスウォーク店',z:'553-0003',a:'大阪府大阪市福島区福島1-51',ar:'市街地'},
+  {b:'MYGOL',n:'越谷せんげん台駅東口店',z:'343-0042',a:'埼玉県越谷市千間台東1-3-1',ar:'郊外'},
+  {b:'MYGOL',n:'池尻大橋店',z:'154-0001',a:'東京都世田谷区池尻3-11-6',ar:'市街地'},
+  {b:'MYGOL',n:'西横浜店',z:'220-0055',a:'神奈川県横浜市西区浜松町12-27',ar:'市街地'},
+  {b:'MYGOL',n:'荻窪タウンセブンビル店',z:'167-0043',a:'東京都杉並区上荻1-9-1',ar:'市街地'},
+  {b:'MYGOL',n:'東川口店',z:'333-0801',a:'埼玉県川口市東川口1-13-1',ar:'郊外'},
+  {b:'MYGOL',n:'岐阜各務原店',z:'509-0104',a:'岐阜県各務原市各務おがせ町9-223',ar:'郊外'},
+  {b:'MYGOL',n:'宝塚店',z:'665-0823',a:'兵庫県宝塚市安倉南3-8-15',ar:'郊外'},
+  {b:'MYGOL',n:'ラパーク岸和田店',z:'596-0006',a:'大阪府岸和田市春木若松町21-1',ar:'郊外'},
+  {b:'MYGOL',n:'広島大手町店',z:'730-0051',a:'広島県広島市中区大手町3-13-29',ar:'市街地'},
+  {b:'MYGOL',n:'武蔵村山店',z:'208-0011',a:'東京都武蔵村山市学園1-25-2',ar:'郊外'},
+  {b:'MYGOL',n:'ヨークタウン仙台小松島店',z:'981-0905',a:'宮城県仙台市青葉区小松島四丁目14-30',ar:'市街地'},
+  {b:'MYGOL',n:'長岡駅前店',z:'940-0062',a:'新潟県長岡市大手通2-4-5',ar:'郊外'},
+  {b:'MYGOL',n:'ドン・キホーテ西宮店',z:'662-0918',a:'兵庫県西宮市六湛寺町1-13',ar:'郊外'},
+  {b:'MYGOL',n:'竹ノ塚店',z:'121-0813',a:'東京都足立区竹の塚3-6-7',ar:'市街地'},
+  {b:'MYGOL',n:'日進店',z:'',a:'',ar:'郊外'},
+  {b:'MYGOL',n:'新宿百人町店',z:'169-0073',a:'東京都新宿区百人町4-9-5',ar:'市街地'},
+  {b:'MYGOL',n:'和歌山店',z:'',a:'',ar:'郊外'},
+  {b:'MYGOL',n:'府中本町店',z:'',a:'',ar:'市街地'},
+  {b:'MYGOL',n:'アクロスプラザ北柏店',z:'',a:'',ar:'郊外'},
+];
+
+/* Helpers */
+const hav=(la1,lo1,la2,lo2)=>{const R=6371,r=Math.PI/180,dLa=(la2-la1)*r,dLo=(lo2-lo1)*r,a=Math.sin(dLa/2)**2+Math.cos(la1*r)*Math.cos(la2*r)*Math.sin(dLo/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))};
+const genId=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const addM=(ts,n)=>{const d=new Date(ts);d.setMonth(d.getMonth()+n);return d.getTime()};
+const fmt=ts=>{const d=new Date(ts);return`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`};
+const todayStr=()=>{const d=new Date();return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const isR=b=>b==='MY GOLF RANGE';
+const defR=ar=>ar==='市街地'?2:5;
+
+/* State */
+let db=null;
+const S={};
+const E={};
+let selId=null, showC=false, showRng=true, searchQ='', filterSt=null;
+let isOwner=false;
+
+/* Build stores */
+RAW.forEach((r,i)=>{
+  const id='s'+String(i).padStart(3,'0');
+  const c=COORDS[r.n];
+  S[id]={id,n:r.n,b:r.b,z:r.z,a:r.a,ar:r.ar,rad:defR(r.ar),lat:c?c[0]:null,lng:c?c[1]:null};
+});
+
+/* Status */
+// 予定（st:'plan'）は商圏に反映しない。実施済（st:'done'、旧データは st なし）のみ反映
+const isDone=ev=>ev.st!=='plan';
+// 日時 ts 時点での店舗の状態（excludeId のイベントは除外）
+function statusAt(id,ts,excl){
+  const s=S[id];if(!s)return{st:'ok'};
+  const act=Object.values(E).filter(ev=>isDone(ev)&&!(excl&&excl.has(ev.id))&&ev.held<=ts&&ev.exp>ts);
+  for(const ev of act) if(ev.sid===id) return{st:'ev',ev};
+  if(s.lat!=null) for(const ev of act){
+    const es=S[ev.sid];if(!es||ev.sid===id||es.lat==null) continue;
+    if(hav(s.lat,s.lng,es.lat,es.lng)<(s.rad+es.rad)) return{st:'re',by:es,ev};
+  }
+  return{st:'ok'};
+}
+function status(id){ return statusAt(id,Date.now()); }
+// 店舗の予定（日付順）
+const plansOf=id=>Object.values(E).filter(ev=>ev.st==='plan'&&ev.sid===id).sort((a,b)=>a.held-b.held);
+const dayStart=(ts=Date.now())=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime()};
+const fmtMD=ts=>{const d=new Date(ts);return`${d.getMonth()+1}/${d.getDate()}`};
+const WD='日月火水木金土';
+// 複数日程：同じ grp を持つイベントを1つの予定として扱う（旧データは単独）
+const grpKey=ev=>ev.grp||ev.id;
+const groupOf=ev=>Object.values(E).filter(x=>grpKey(x)===grpKey(ev)).sort((a,b)=>a.held-b.held);
+function groups(fn){
+  const m={};
+  for(const ev of Object.values(E)) if(fn(ev)) (m[grpKey(ev)]=m[grpKey(ev)]||[]).push(ev);
+  return Object.values(m).map(a=>a.sort((x,y)=>x.held-y.held));
+}
+// 日付リストを「10/16〜10/18、10/20」の形にまとめる
+function fmtDates(ts){
+  const ds=[...new Set(ts.map(t=>dayStart(t)))].sort((a,b)=>a-b);
+  const out=[];
+  for(let i=0;i<ds.length;){
+    let j=i;
+    while(j+1<ds.length&&Math.round((ds[j+1]-ds[j])/86400000)===1) j++;
+    out.push(j>i?`${fmtMD(ds[i])}〜${fmtMD(ds[j])}`:fmtMD(ds[i]));
+    i=j+1;
+  }
+  return out.join('、');
+}
+const fmtW=ts=>`${fmt(ts)}（${WD[new Date(ts).getDay()]}）`;
+function col(id,st){
+  const s=S[id];if(!s)return'#94A3B8';
+  if(st==='ev')return'#C2361F';if(st==='re')return'#E08A00';
+  return isR(s.b)?'#2F6FDB':'#1F7A45';
+}
+
+/* ===== MAP（Leaflet + 国土地理院地図） ===== */
+const GSI_ATTR='<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>';
+/* シンプル地図：国土地理院ベクトルタイルから「陸・海・海岸線・行政界・都道府県/市区町村名」だけを描画。
+   道路・鉄道・建物・地図記号・細かい町名は表示しない */
+const C_SEA='#CFE0EE', C_LAND='#F7F6F2';
+const ADM_NAMES=[110,120,130,140]; // 注記分類コード：都道府県名・市区町村名
+const SIMPLE_STYLE={
+  version:8,
+  glyphs:'https://gsi-cyberjapan.github.io/optimal_bvmap/glyphs/{fontstack}/{range}.pbf',
+  sources:{v:{type:'vector',minzoom:4,maxzoom:16,
+    tiles:['pmtiles://https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/optimal_bvmap-v1.pmtiles/{z}/{x}/{y}']}},
+  layers:[
+    // 低ズームでは海を背景色、ズーム8以上では水域ポリゴンで海を塗る（地理院の標準スタイルと同じ構成）
+    {id:'bg',type:'background',paint:{'background-color':['step',['zoom'],C_SEA,8,C_LAND]}},
+    {id:'land',type:'fill',source:'v','source-layer':'AdmArea',paint:{'fill-color':C_LAND}},
+    {id:'water',type:'fill',source:'v','source-layer':'WA',paint:{'fill-color':C_SEA}},
+    {id:'coast',type:'line',source:'v','source-layer':'Cstline',paint:{'line-color':'#A9BFD0','line-width':.8}},
+    {id:'city-bdry',type:'line',source:'v','source-layer':'AdmBdry',minzoom:9,filter:['==',['get','vt_code'],1212],
+      paint:{'line-color':'#DDD8CE','line-width':.8}},
+    {id:'pref-bdry',type:'line',source:'v','source-layer':'AdmBdry',filter:['==',['get','vt_code'],1211],
+      paint:{'line-color':'#BDB6A8','line-width':['interpolate',['linear'],['zoom'],5,.6,10,1.4]}},
+    {id:'adm-names',type:'symbol',source:'v','source-layer':'Anno',
+      filter:['all',['==',['geometry-type'],'Point'],['in',['get','vt_code'],['literal',ADM_NAMES]],
+        ['step',['zoom'],['any',['!',['has','vt_flag17']],['in',['get','vt_flag17'],['literal',[0,1]]]],
+          17,['any',['!',['has','vt_flag17']],['in',['get','vt_flag17'],['literal',[1,2]]]]]],
+      layout:{'text-field':['get','vt_text'],'text-font':['literal',['NotoSansJP-Regular']],
+        'text-size':['match',['get','vt_code'],110,14,[120,140],12.5,11.5],
+        'symbol-sort-key':['match',['get','vt_code'],110,0,[120,140],1,2],'text-padding':6},
+      paint:{'text-color':['match',['get','vt_code'],110,'#3F4A5A','#5E6878'],
+        'text-halo-color':'rgba(255,255,255,.95)','text-halo-width':1.6}},
+  ],
+};
+const GSI_VT_ATTR='<a href="https://github.com/gsi-cyberjapan/optimal_bvmap" target="_blank" rel="noopener">国土地理院最適化ベクトルタイル</a>';
+function simpleLayer(){
+  // ベクトル地図が使えない環境（ライブラリ読込失敗・WebGL非対応）では淡色地図で代替
+  const c=document.createElement('canvas');
+  const gl=c.getContext('webgl2')||c.getContext('webgl');
+  if(!gl||!window.maplibregl||!window.pmtiles||!L.maplibreGL) return null;
+  try{ maplibregl.addProtocol('pmtiles',new pmtiles.Protocol().tile); }catch(e){}
+  const layer=L.maplibreGL({style:SIMPLE_STYLE});
+  layer.getAttribution=()=>GSI_VT_ATTR; // 出典表示（国土地理院の利用規約で必須）
+  return layer;
+}
+const paleLayer=L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxNativeZoom:18,maxZoom:20,attribution:GSI_ATTR});
+const BASE_LAYERS={
+  'シンプル（おすすめ）':simpleLayer()||paleLayer,
+  '詳細地図（道路・駅あり）':paleLayer,
+  '航空写真':L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{maxNativeZoom:18,maxZoom:20,attribution:GSI_ATTR}),
+};
+if(BASE_LAYERS['シンプル（おすすめ）']===paleLayer) delete BASE_LAYERS['シンプル（おすすめ）'];
+const map=L.map('map',{zoomControl:false,minZoom:4,maxZoom:18}).setView([36.5,137.5],5);
+// 前回選んだ地図の種類を復元
+let baseName=Object.keys(BASE_LAYERS)[0];
+try{ const v=localStorage.getItem('mg_base2'); if(v&&BASE_LAYERS[v]) baseName=v; }catch(e){}
+BASE_LAYERS[baseName].addTo(map);
+map.on('baselayerchange',e=>{ try{localStorage.setItem('mg_base2',e.name);}catch(_){} });
+L.control.layers(BASE_LAYERS,null,{position:'topleft'}).addTo(map);
+L.control.scale({imperial:false,position:'bottomleft'}).addTo(map);
+
+const circleLayer=L.layerGroup().addTo(map);
+const markerLayer=L.layerGroup().addTo(map);
+const MK={}; // 店舗ID → マーカー
+
+function mkIcon(s,c,isSel){
+  const sz=isSel?18:13;
+  return L.divIcon({className:'mk-wrap',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2],
+    html:`<div class="mk ${isR(s.b)?'dia':'dot'}${isSel?' sel':''}" style="background:${c};--c:${c}"></div>`});
+}
+
+function drawMap(){
+  circleLayer.clearLayers();
+  const seen=new Set();
+  for(const s of Object.values(S)){
+    if(s.lat==null||s.lng==null) continue;
+    if(isR(s.b)&&!showRng) continue;
+    const{st}=status(s.id);
+    const c=col(s.id,st);
+    const isSel=s.id===selId;
+    // 商圏円（実距離 km → m）
+    if(showC){
+      L.circle([s.lat,s.lng],{radius:(s.rad||defR(s.ar))*1000,interactive:false,
+        color:c,weight:1.5,opacity:.7,dashArray:'6 4',fillColor:c,fillOpacity:.08}).addTo(circleLayer);
+    }
+    const key=`${c}|${isSel}|${s.b}`;
+    let m=MK[s.id];
+    if(!m){
+      const id=s.id;
+      m=L.marker([s.lat,s.lng],{icon:mkIcon(s,c,isSel),riseOnHover:true})
+        .bindTooltip(()=>esc(S[id]?.n),{direction:'top',offset:[0,-8]})
+        .on('click',()=>{ if(selId===id) closeDetail(); else sel(id,false); })
+        .addTo(markerLayer);
+      MK[id]=m;
+    } else {
+      m.setLatLng([s.lat,s.lng]);
+      if(m._key!==key) m.setIcon(mkIcon(s,c,isSel));
+    }
+    m._key=key;
+    m.setZIndexOffset(isSel?1000:0);
+    seen.add(s.id);
+  }
+  for(const id of Object.keys(MK)) if(!seen.has(id)){ markerLayer.removeLayer(MK[id]); delete MK[id]; }
+}
+
+// 全店舗が入るように表示
+function fitAll(){
+  const pts=Object.values(S).filter(s=>s.lat!=null&&s.lng!=null&&(isR(s.b)?showRng:true)).map(s=>[s.lat,s.lng]);
+  if(!pts.length) return;
+  map.fitBounds(pts,{padding:[30,30],maxZoom:14});
+}
+function fitAllBtn(){ fitAll(); }
+function zoom(factor){ factor>1?map.zoomIn():map.zoomOut(); }
+
+// 地図の空白部分クリック：住所編集中なら位置を指定、それ以外は詳細を閉じる
+map.on('click',e=>{
+  const latIn=document.getElementById('ea-lat');
+  if(isOwner&&latIn){
+    latIn.value=e.latlng.lat.toFixed(6);
+    document.getElementById('ea-lng').value=e.latlng.lng.toFixed(6);
+    toast('📍 クリックした地点を入力しました（「保存する」で確定）');
+    return;
+  }
+  if(selId) closeDetail();
+});
+
+// ===== SIDEBAR =====
+function renderList(){
+  const el=document.getElementById('list');
+  const q=searchQ.toLowerCase();
+  const arr=Object.values(S).sort((a,b)=>{
+    const ag=isR(a.b)?1:0,bg=isR(b.b)?1:0;
+    if(ag!==bg) return ag-bg;
+    return a.n.localeCompare(b.n,'ja');
+  });
+  const vis=arr.filter(s=>{
+    if(isR(s.b)&&!showRng) return false;
+    if(q&&!s.n.toLowerCase().includes(q)) return false;
+    if(filterSt!==null){
+      const{st}=status(s.id);
+      if(filterSt==='ok'&&!(st==='ok'&&s.lat!=null&&s.a)) return false;
+      if(filterSt==='ev'&&st!=='ev') return false;
+      if(filterSt==='re'&&st!=='re') return false;
+    }
+    return true;
+  });
+  const hdLabel=filterSt==='ok'?'実施可能':filterSt==='ev'?'直近実施済':filterSt==='re'?'制限中':null;
+  document.getElementById('lh').textContent=
+    hdLabel?`${hdLabel}（${vis.length}件）`:q?`検索結果（${vis.length}件）`:`店舗一覧（${vis.length}件）`;
+  const exist={};
+  for(const e of el.querySelectorAll('[data-id]')) exist[e.dataset.id]=e;
+  const visIds=new Set(vis.map(s=>s.id));
+  for(const s of arr){
+    const show=visIds.has(s.id);
+    const{st,ev,by}=status(s.id);
+    const c=col(s.id,st);
+    const isRange=isR(s.b);
+    let meta='',btnC='',btnT='',btnA=null;
+    if(!s.a){meta='住所未登録';btnC='na';btnT='—';}
+    else if(s.lat==null){meta='位置情報なし';btnC='na';btnT='—';}
+    else if(st==='ev'&&ev){meta=`直近でイベント実施済 〜 復活:${fmt(ev.exp)}`;btnC=isOwner?'can':'na';btnT=isOwner?'取消':'●';btnA=isOwner?()=>cancelEv(s.id):null;}
+    else if(st==='re'&&by){meta=`制限中（${by.n}）`;btnC='lock';btnT='制限中';}
+    else{meta=s.a;btnC=isOwner?'rec':'na';btnT=isOwner?'記録':'●';btnA=isOwner?()=>recEv(s.id):null;}
+    const np=plansOf(s.id)[0];
+    if(np&&s.a) meta=`📅 予定 ${fmtMD(np.held)}・${meta}`;
+    let row=exist[s.id];
+    if(!row){
+      row=document.createElement('div');row.className='si';row.dataset.id=s.id;
+      row.addEventListener('click',()=>sel(s.id));
+      el.appendChild(row);
+    }
+    row.style.display=show?'':'none';
+    row.classList.toggle('sel',s.id===selId);
+    row.innerHTML=`
+      <div class="si-mk ${isRange?'dia':'dot'}" style="background:${c}"></div>
+      <div class="si-body">
+        <div class="si-nm">${esc(s.n)}</div>
+        <div class="si-mt">${esc(meta)}</div>
+      </div>
+      <div class="si-r">
+        <span class="si-km">${s.rad}km</span>
+        <button class="ev ${btnC}" data-bid="${s.id}">${btnT}</button>
+      </div>`;
+    const btn=row.querySelector(`[data-bid="${s.id}"]`);
+    if(btnA) btn.addEventListener('click',e=>{e.stopPropagation();btnA();});
+    else btn.addEventListener('click',e=>e.stopPropagation());
+    delete exist[s.id];
+  }
+  for(const e of Object.values(exist)) e.remove();
+}
+
+function renderStats(){
+  let f=0,r=0,ev=0,re=0;
+  for(const s of Object.values(S)){
+    if(s.lat==null) continue;
+    const{st}=status(s.id);
+    if(st==='ev') ev++;
+    else if(st==='re') re++;
+    else if(isR(s.b)) r++;
+    else f++;
+  }
+  document.getElementById('c-f').textContent=f;
+  document.getElementById('c-r').textContent=r;
+  document.getElementById('c-e').textContent=ev;
+  document.getElementById('c-re').textContent=re;
+  document.querySelector('.sb-sub').textContent=`MYGOL グループ 全国${Object.keys(S).length}店舗`;
+}
+
+function renderBadges(){
+  const today0=dayStart();
+  const pg=groups(ev=>ev.st==='plan');
+  const late=pg.filter(g=>g.at(-1).held<today0).length;
+  const bm=document.getElementById('badge-map'), bc=document.getElementById('badge-cal');
+  bm.textContent=Object.keys(S).length;
+  // 実施報告待ちがあれば橙で件数、なければ今後の予定の件数
+  bc.textContent=late||pg.length||'';
+  bc.classList.toggle('warn',!!late);
+  bc.title=late?`実施報告待ち ${late}件`:`予定 ${pg.length}件`;
+}
+function render(){
+  renderBadges();
+  if(view==='cal') renderCal();
+  drawMap();
+  renderList();
+  renderStats();
+  if(selId) showDetail(selId);
+}
+
+/* Select */
+function sel(id,pan=true){
+  // 別の店舗への切り替え時は編集フォームをリセット
+  if(id!==selId){ const ea=document.getElementById('d-edit-addr');ea.innerHTML='';ea.dataset.open='0'; }
+  selId=id;
+  const s=S[id];
+  // 店舗の位置へ移動（周辺の道路・駅が見える縮尺まで拡大）
+  if(pan&&s?.lat!=null&&s?.lng!=null) map.flyTo([s.lat,s.lng],Math.max(map.getZoom(),14),{duration:.6});
+  render();
+}
+function closeDetail(){
+  selId=null;
+  document.getElementById('detail').classList.remove('open');
+  const ea=document.getElementById('d-edit-addr');
+  ea.innerHTML='';ea.dataset.open='0';
+  drawMap();renderList();
+}
+
+function showDetail(id){
+  const s=S[id];if(!s)return;
+  // 別の店舗への切り替え時は編集フォームをリセット
+  if(id!==selId){ const ea=document.getElementById('d-edit-addr');ea.innerHTML='';ea.dataset.open='0'; }
+  const{st,ev,by}=status(id);
+  const rng=isR(s.b);
+  document.getElementById('d-nm').textContent=s.n;
+  const chips=[`<span class="chip ${rng?'chip-r':'chip-f'}">${rng?'MY GOLF RANGE':'MYGOL/GOLF LANE'}</span>`];
+  if(s.lat){
+    if(st==='ev') chips.push('<span class="chip chip-ev">直近実施済</span>');
+    else if(st==='re') chips.push('<span class="chip chip-re">制限中</span>');
+    else chips.push('<span class="chip chip-ok">実施可能</span>');
+  } else chips.push('<span class="chip chip-ng">位置未取得</span>');
+  const pgs=groups(ev=>ev.st==='plan'&&ev.sid===id).sort((a,b)=>a[0].held-b[0].held);
+  if(pgs.length) chips.push(`<span class="chip chip-pl">📅 予定 ${pgs.length}件</span>`);
+  document.getElementById('d-chips').innerHTML=chips.join('');
+  let info='';
+  if(st==='ev'&&ev) info=`<div class="info-box ib-ev">✅ 直近でイベント実施済<br>実施日：${fmt(ev.held)}<br>商圏復活日：${fmt(ev.exp)}</div>`;
+  else if(st==='re'&&by) info=`<div class="info-box ib-re">⚠ 商圏重複により実施不可<br>対象：<b>${esc(by.n)}</b><br>解除予定：${fmt(ev.exp)}</div>`;
+  document.getElementById('d-info').innerHTML=info;
+  document.getElementById('d-br').textContent=s.b;
+  document.getElementById('d-ad').textContent=s.a||'住所未登録';
+  document.getElementById('d-gm').innerHTML=gmLinks(s);
+  document.getElementById('d-ar').textContent=s.ar;
+  document.getElementById('d-rad').value=s.rad;
+  // 商圏半径の更新ボタン：オーナーのみ表示
+  document.getElementById('d-rad').disabled=!isOwner;
+  const radBtn=document.querySelector('[onclick="saveRad()"]');
+  if(radBtn) radBtn.style.display=isOwner?'':'none';
+  // 住所編集セクション
+  const ea=document.getElementById('d-edit-addr');
+  if(!ea.dataset.open||ea.dataset.open!=='1'){
+    ea.innerHTML=isOwner
+      ?`<button class="ea-toggle" onclick="toggleEditAddr('${id}')">✏ 住所・位置を編集</button>`
+      :'';
+    if(ea.dataset.open!=='1') ea.dataset.open='0';
+  }
+  const act=document.getElementById('d-act');
+  if(!isOwner){ act.innerHTML=''; }
+  else if(!s.a) act.innerHTML='';
+  else if(s.lat==null) act.innerHTML='<div style="font-size:10px;color:var(--text3);text-align:center;padding:4px">住所からの位置情報が登録されていません</div>';
+  else if(st==='ev') act.innerHTML=`<button class="btn btn-dng" onclick="cancelEv('${id}')">✕ イベント記録を取り消す</button>`;
+  else if(st==='ok') act.innerHTML=`
+    <div class="ev-date-row">
+      <label>実施日</label>
+      <input class="ev-date-in" type="date" id="ev-date-in" value="${todayStr()}" max="${todayStr()}">
+    </div>
+    <button class="btn btn-prim" onclick="recEv('${id}')">🎯 イベント実施を記録する</button>`;
+  else act.innerHTML='';
+  // 予定（カレンダーと共通）
+  const today0=dayStart();
+  let ph='';
+  if(pgs.length||isOwner) ph+='<div class="dl" style="margin-top:10px">予定</div>';
+  if(pgs.length) ph+='<div class="dp-list">'+pgs.map(g=>{const late=g[g.length-1].held<today0;
+    return `<div class="dp-item${late?' late':''}" onclick="openEvModal({id:'${g[0].id}'})">📅 ${g.length>1?`${fmtDates(g.map(x=>x.held))}（${g.length}日間）`:fmtW(g[0].held)}${late?' ・実施報告待ち':''}${g[0].memo?'<br>'+esc(g[0].memo):''}</div>`;}).join('')+'</div>';
+  if(isOwner&&s.a) ph+=`<button class="btn btn-sec" style="width:100%;justify-content:center;margin-top:6px" onclick="openEvModal({sid:'${id}',st:'plan'})">📅 予定を登録</button>`;
+  act.insertAdjacentHTML('beforeend',ph);
+  document.getElementById('detail').classList.add('open');
+}
+
+/* Google マップへのリンク */
+function gmLinks(s){
+  const out=[];
+  const q=s.a?`${s.a.split(/\s/)[0]} ${s.b} ${s.n}`:(s.lat!=null?`${s.lat},${s.lng}`:'');
+  if(q) out.push(`<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}" target="_blank" rel="noopener">🗺 Googleマップ</a>`);
+  if(s.lat!=null&&s.lng!=null){
+    out.push(`<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${s.lat},${s.lng}" target="_blank" rel="noopener">👀 ストリートビュー</a>`);
+    out.push(`<a href="https://maps.gsi.go.jp/#16/${s.lat}/${s.lng}/" target="_blank" rel="noopener">地理院地図</a>`);
+  }
+  return out.join('');
+}
+
+/* Search */
+function onSearch(v){searchQ=v.trim();renderList();}
+function setFilter(st){
+  filterSt=st;
+  for(const id of ['all','ok','ev','re']){
+    const el=document.getElementById('fc-'+id);
+    if(el) el.classList.toggle('active',(st===null&&id==='all')||(st===id));
+  }
+  renderList();
+}
+
+/* Toggle controls */
+function toggleRange(v){showRng=v;render();}
+function toggleCircles(){
+  showC=!showC;
+  document.getElementById('cb-btn').classList.toggle('active',showC);
+  document.getElementById('mb-c').classList.toggle('on',showC);
+  document.getElementById('cb-btn').textContent=showC?'◉ 商圏を非表示':'◎ 商圏を表示';
+  drawMap();
+}
+
+/* Event CRUD */
+async function recEv(id){
+  const s=S[id];if(!s||s.lat==null)return;
+  // Read date from picker if present, fall back to today
+  const inp=document.getElementById('ev-date-in');
+  let held=Date.now();
+  if(inp&&inp.value){
+    const parsed=new Date(inp.value+'T00:00:00');
+    if(!isNaN(parsed)) held=parsed.getTime();
+  }
+  const eid=genId();
+  if(held>Date.now()){ toast('⚠ 未来の日付は「予定を登録」から登録してください'); return; }
+  const d={id:eid,sid:id,held,exp:addM(held,3),st:'done',by:authUser?.email||''};
+  E[eid]=d;
+  if(db) db.doc(`events/${eid}`).set(d).catch(()=>{});else saveL();
+  render();toast(`✅ ${s.n} のイベントを記録しました（${fmt(held)}）`);
+}
+async function cancelEv(id){
+  const now=Date.now();
+  for(const[eid,ev] of Object.entries(E)) if(isDone(ev)&&ev.sid===id&&ev.held<=now&&ev.exp>now){
+    delete E[eid];
+    if(db) db.doc(`events/${eid}`).delete().catch(()=>{});else saveL();
+    break;
+  }
+  render();toast('🗑 イベント記録を取り消しました');
+}
+function saveRad(){
+  if(!selId||!isOwner)return;
+  const v=parseFloat(document.getElementById('d-rad').value);
+  if(isNaN(v)||v<=0)return;
+  S[selId].rad=v;
+  const col=S[selId].custom?'stores_custom':'stores';
+  dbUpdate(`${col}/${selId}`,{rad:v});
+  render();toast(`📐 商圏半径を ${v}km に更新しました`);
+}
+
+/* ===== DB helpers ===== */
+async function dbUpdate(path, data){
+  if(!db){ saveL(); return; }
+  db.doc(path).update(data).catch(()=>{});
+}
+
+/* ===== Add store ===== */
+function showAddModal(){
+  document.getElementById('as-name').value='';
+  document.getElementById('as-addr').value='';
+  document.getElementById('as-lat').value='';
+  document.getElementById('as-lng').value='';
+  document.getElementById('as-brand').value='MYGOL';
+  document.getElementById('as-ar').value='市街地';
+  document.getElementById('add-modal').classList.remove('hidden');
+  document.getElementById('as-name').focus();
+}
+function hideAddModal(){ document.getElementById('add-modal').classList.add('hidden'); }
+async function addStore(){
+  const n=document.getElementById('as-name').value.trim();
+  if(!n){ toast('⚠ 店舗名を入力してください'); return; }
+  const b=document.getElementById('as-brand').value;
+  const a=document.getElementById('as-addr').value.trim();
+  const ar=document.getElementById('as-ar').value;
+  const latV=parseFloat(document.getElementById('as-lat').value);
+  const lngV=parseFloat(document.getElementById('as-lng').value);
+  const lat=isNaN(latV)?null:latV;
+  const lng=isNaN(lngV)?null:lngV;
+  const rad=defR(ar);
+  const id='c'+genId();
+  const store={id,n,b,z:'',a,ar,rad,lat,lng,custom:true};
+  S[id]=store;
+  if(db) db.doc(`stores_custom/${id}`).set(store).catch(()=>{});
+  hideAddModal();
+  render();renderList();renderStats();
+  toast(`✅ ${n} を追加しました`);
+  sel(id);
+}
+
+/* ===== Edit address ===== */
+function toggleEditAddr(id){
+  const ea=document.getElementById('d-edit-addr');
+  if(ea.dataset.open==='1'){ ea.dataset.open='0'; showDetail(id); return; }
+  const s=S[id];
+  ea.dataset.open='1';
+  ea.innerHTML=`
+    <button class="ea-toggle" onclick="toggleEditAddr('${id}')">▲ 住所・位置の編集を閉じる</button>
+    <div class="ea-form">
+      <div class="f-row">
+        <label class="f-lbl">住所</label>
+        <input class="f-inp" id="ea-addr" type="text" value="${esc(s.a||'')}">
+      </div>
+      <div class="f-row-2">
+        <div>
+          <label class="f-lbl">緯度</label>
+          <input class="f-inp" id="ea-lat" type="number" step="any" value="${s.lat!=null?s.lat:''}">
+        </div>
+        <div>
+          <label class="f-lbl">経度</label>
+          <input class="f-inp" id="ea-lng" type="number" step="any" value="${s.lng!=null?s.lng:''}">
+        </div>
+      </div>
+      <button class="btn btn-sec" style="width:100%;justify-content:center;margin-bottom:6px" onclick="geocodeInto('ea-addr','ea-lat','ea-lng')">🔎 住所から位置を取得</button>
+      <div class="f-hint" style="margin:0 0 8px">地図をクリックしても位置を指定できます。</div>
+      <button class="btn btn-prim" style="width:100%;justify-content:center;font-size:11px;padding:7px" onclick="saveAddress('${id}')">📍 保存する</button>
+    </div>`;
+}
+async function saveAddress(id){
+  const a=document.getElementById('ea-addr').value.trim();
+  const latV=parseFloat(document.getElementById('ea-lat').value);
+  const lngV=parseFloat(document.getElementById('ea-lng').value);
+  const lat=isNaN(latV)?null:latV;
+  const lng=isNaN(lngV)?null:lngV;
+  S[id].a=a; S[id].lat=lat; S[id].lng=lng;
+  if(db){
+    const col=S[id].custom?'stores_custom':'stores';
+    dbUpdate(`${col}/${id}`,{a,lat,lng});
+  }
+  document.getElementById('d-edit-addr').dataset.open='0';
+  render(); renderList(); renderStats();
+  showDetail(id);
+  toast('📍 住所・位置を更新しました');
+}
+
+/* 住所 → 緯度経度（国土地理院 住所検索API） */
+async function geocodeInto(addrId,latId,lngId){
+  const addr=(document.getElementById(addrId).value||'').trim().split(/\s/)[0]; // 建物名・階数は除く
+  if(!addr){ toast('⚠ 住所を入力してください'); return; }
+  try{
+    const r=await fetch('https://msearch.gsi.go.jp/address-search/AddressSearch?q='+encodeURIComponent(addr));
+    const j=await r.json();
+    if(!j.length){ toast('⚠ 住所が見つかりませんでした'); return; }
+    const[lng,lat]=j[0].geometry.coordinates;
+    document.getElementById(latId).value=lat.toFixed(6);
+    document.getElementById(lngId).value=lng.toFixed(6);
+    if(latId==='ea-lat') map.flyTo([lat,lng],Math.max(map.getZoom(),16),{duration:.6});
+    toast(`📍 位置を取得しました：${j[0].properties.title}`);
+  }catch(e){ toast('⚠ 位置を取得できませんでした'); }
+}
+
+/* localStorage */
+function saveL(){
+  try{
+    const r={};for(const[id,s] of Object.entries(S)) if(s.rad!==defR(s.ar)) r[id]=s.rad;
+    localStorage.setItem('mg_r',JSON.stringify(r));
+    localStorage.setItem('mg_e',JSON.stringify(E));
+  }catch(e){}
+}
+function loadL(){
+  try{
+    const r=JSON.parse(localStorage.getItem('mg_r')||'{}');
+    for(const[id,v] of Object.entries(r)) if(S[id]) S[id].rad=v;
+    const es=JSON.parse(localStorage.getItem('mg_e')||'{}');
+    const now=Date.now();
+    for(const[eid,e] of Object.entries(es)) if(e.exp>now) E[eid]=e;
+  }catch(e){}
+}
+
+/* ===== Supabase ===== */
+// 公開用の anon key（ブラウザに置いてよい鍵。書き込み権限はデータベース側の RLS で制御）
+const SB_URL='https://exmkbkvqaonolcazcetc.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4bWtia3ZxYW9ub2xjYXpjZXRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA5MDU4NTUsImV4cCI6MjEwNjQ4MTg1NX0.UOm_TLlrp1XE81qYaNbd1i2yeTWVcfCYWI1tb8fhELs';
+const sb=window.supabase?.createClient(SB_URL,SB_KEY);
+
+// 旧サイトの doc/collection 形式の API を Supabase の docs テーブルで再現する
+function createSupabaseDb(){
+  if(!sb) throw new Error('supabase-js not loaded');
+  const fail=e=>{ toast('⚠ 保存できませんでした（権限がないか、通信エラーです）'); throw e; };
+  const ok=({error})=>{ if(error) fail(error); };
+  const split=path=>{ const i=path.indexOf('/'); return [path.slice(0,i), path.slice(i+1)]; };
+  const upsert=(c,id,data)=>sb.from('docs')
+    .upsert({collection:c,id,data,updated_at:new Date().toISOString()}).then(ok);
+  const listeners=[];
+  sb.channel('docs-changes')
+    .on('postgres_changes',{event:'*',schema:'public',table:'docs'},p=>{
+      const deleted=p.eventType==='DELETE';
+      const row=deleted?p.old:p.new;
+      if(!row?.collection) return;
+      for(const fn of listeners) fn({collection:row.collection,id:row.id,data:deleted?null:row.data,deleted});
+    })
+    .subscribe();
+  return {
+    doc(path){
+      const [c,id]=split(path);
+      return {
+        set:data=>upsert(c,id,data),
+        async update(data){
+          const {data:row,error}=await sb.from('docs').select('data')
+            .eq('collection',c).eq('id',id).maybeSingle();
+          if(error) fail(error);
+          return upsert(c,id,{...(row?.data||{}),...data});
+        },
+        delete:()=>sb.from('docs').delete().eq('collection',c).eq('id',id).then(ok),
+      };
+    },
+    collection(c){
+      return {
+        async get(){
+          const {data,error}=await sb.from('docs').select('id,data').eq('collection',c);
+          if(error) throw error;
+          return {docs:data.map(r=>({id:r.id,exists:true,data:()=>r.data}))};
+        },
+      };
+    },
+    onChange(fn){ listeners.push(fn); },
+  };
+}
+
+function applyStoreOverride(id,d){
+  if(!d||!S[id]) return;
+  if(typeof d.rad==='number') S[id].rad=d.rad;
+  if(d.a!==undefined) S[id].a=d.a;
+  if('lat' in d) S[id].lat=d.lat!=null?parseFloat(d.lat):null;
+  if('lng' in d) S[id].lng=d.lng!=null?parseFloat(d.lng):null;
+}
+function applyCustomStore(id,d){
+  if(!d||!d.n) return;
+  S[id]={...d, id, custom:true,
+    rad: typeof d.rad==='number'?d.rad:defR(d.ar||'市街地'),
+    lat: d.lat!=null?parseFloat(d.lat):null,
+    lng: d.lng!=null?parseFloat(d.lng):null};
+}
+
+/* ===== 編集者ログイン ===== */
+let authUser=null;
+async function refreshAuth(session, initial){
+  authUser=session?.user||null;
+  let owner=false;
+  if(authUser){
+    const {data,error}=await sb.rpc('is_editor');
+    owner=!error&&data===true;
+  }
+  const changed=owner!==isOwner;
+  isOwner=owner;
+  document.getElementById('add-btn-row').style.display=isOwner?'':'none';
+  document.getElementById('cal-add').style.display=isOwner?'':'none';
+  document.getElementById('auth-who').textContent=authUser?authUser.email:'ゲスト';
+  document.getElementById('auth-role').textContent=!authUser?'閲覧のみ':isOwner?'編集者':'閲覧のみ（編集権限なし）';
+  document.getElementById('auth-btn').textContent=authUser?'ログアウト':'🔑 編集者ログイン';
+  if(!initial&&changed){
+    render();
+    toast(isOwner?'✏ 編集モードになりました':'閲覧モードになりました');
+  } else if(!initial&&authUser&&!isOwner){
+    toast('⚠ このアカウントには編集権限がありません');
+  }
+}
+function onAuthBtn(){
+  if(!sb) return;
+  if(authUser){ sb.auth.signOut(); return; }
+  document.getElementById('lg-email').value='';
+  document.getElementById('login-modal').classList.remove('hidden');
+  document.getElementById('lg-email').focus();
+}
+function hideLogin(){ document.getElementById('login-modal').classList.add('hidden'); }
+async function sendLoginLink(){
+  const email=document.getElementById('lg-email').value.trim();
+  if(!email){ toast('⚠ メールアドレスを入力してください'); return; }
+  const btn=document.getElementById('lg-send');
+  btn.disabled=true;
+  const {error}=await sb.auth.signInWithOtp({email, options:{emailRedirectTo:location.origin+location.pathname}});
+  btn.disabled=false;
+  if(error){ toast('⚠ 送信できませんでした：'+error.message); return; }
+  hideLogin();
+  toast('📧 ログイン用リンクを送信しました。メールを確認してください');
+}
+
+/* ===== カレンダー ===== */
+let view='map';
+let calY=new Date().getFullYear(), calM=new Date().getMonth();
+function setView(v){
+  view=v;
+  document.body.dataset.view=v;
+  document.getElementById('tab-map').classList.toggle('active',v==='map');
+  document.getElementById('tab-cal').classList.toggle('active',v==='cal');
+  try{localStorage.setItem('mg_view',v);}catch(e){}
+  if(v==='map') setTimeout(()=>map.invalidateSize(),0);
+  else renderCal();
+}
+function calMove(d){
+  if(d===0){ const n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); }
+  else { calM+=d; if(calM<0){calM=11;calY--;} if(calM>11){calM=0;calY++;} }
+  renderCal();
+}
+function evChip(ev,today0){
+  const s=S[ev.sid]; const nm=s?s.n:'（削除された店舗）';
+  const cls=ev.st==='plan'?('plan'+(groupOf(ev).at(-1).held<today0?' late':'')):'done';
+  const lbl=ev.st==='plan'?'予定':'実施';
+  const g=groupOf(ev);
+  const idx=g.length>1?`<span class="ce-i">${g.indexOf(ev)+1}/${g.length}</span>`:'';
+  return `<div class="ce ${cls}" title="${esc(nm)}${ev.memo?' — '+esc(ev.memo):''}" onclick="event.stopPropagation();openEvModal({id:'${ev.id}'})"><span class="ce-l">${lbl}｜</span>${esc(nm)}${idx}</div>`;
+}
+function renderCal(){
+  document.getElementById('cal-ym').textContent=`${calY}年${calM+1}月`;
+  const first=new Date(calY,calM,1);
+  const start=new Date(calY,calM,1-first.getDay());
+  const last=new Date(calY,calM+1,0);
+  const weeks=Math.ceil((first.getDay()+last.getDate())/7);
+  const today0=dayStart();
+  // 日付ごとにイベントを振り分け
+  const byDay={};
+  for(const ev of Object.values(E)){ const k=dayStart(ev.held); (byDay[k]=byDay[k]||[]).push(ev); }
+  const grid=document.getElementById('cal-grid');
+  grid.style.gridTemplateRows=`auto repeat(${weeks},1fr)`;
+  let h='';
+  for(let i=0;i<7;i++) h+=`<div class="cal-dow ${i===0?'sun':i===6?'sat':''}">${WD[i]}</div>`;
+  for(let i=0;i<weeks*7;i++){
+    const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    const k=d.getTime();
+    const evs=(byDay[k]||[]).sort((a,b)=>(a.st==='plan')-(b.st==='plan')||(S[a.sid]?.n||'').localeCompare(S[b.sid]?.n||'','ja'));
+    const max=3;
+    const cls=['cd',d.getMonth()!==calM?'oth':'',k===today0?'tod':'',d.getDay()===0?'sun':d.getDay()===6?'sat':'',isOwner?'can-add':''].join(' ');
+    h+=`<div class="${cls}" ${isOwner?`onclick="openEvModal({date:${k}})"`:''}><div class="cd-n">${d.getDate()}</div>`
+      +evs.slice(0,max).map(ev=>evChip(ev,today0)).join('')
+      +(evs.length>max?`<div class="ce-more" onclick="event.stopPropagation();showDayList(${k})">他 ${evs.length-max}件</div>`:'')
+      +'</div>';
+  }
+  grid.innerHTML=h;
+  // サイドパネル：実施報告待ち・今後の予定・直近の実施
+  const plans=groups(ev=>ev.st==='plan').sort((a,b)=>a[0].held-b[0].held);
+  const late=plans.filter(g=>g.at(-1).held<today0), upcoming=plans.filter(g=>g.at(-1).held>=today0);
+  const done=groups(ev=>isDone(ev)).sort((a,b)=>b.at(-1).held-a.at(-1).held).slice(0,10);
+  const item=(g,extra='')=>{const ev=g[0];
+    const dt=g.length>1?`${fmtDates(g.map(x=>x.held))}<div style="font-weight:400;color:var(--text3)">${g.length}日間</div>`
+      :`${fmtMD(ev.held)}<span style="font-weight:400;color:var(--text3)">（${WD[new Date(ev.held).getDay()]}）</span>`;
+    return `<div class="cs-item ${extra}" onclick="openEvModal({id:'${ev.id}'})"><div class="cs-date">${dt}</div><div class="cs-body"><div class="cs-nm">${esc(S[ev.sid]?.n||'（削除された店舗）')}</div>${ev.memo?`<div class="cs-memo">${esc(ev.memo)}</div>`:''}</div></div>`;};
+  let sh='';
+  if(late.length) sh+=`<div class="cs-hd">⚠ 実施報告待ち（${late.length}）</div>`+late.map(p=>item(p,'cs-late')).join('');
+  sh+=`<div class="cs-hd">📅 今後の予定（${upcoming.length}）</div>`+(upcoming.length?upcoming.map(p=>item(p)).join(''):'<div class="cs-empty">予定はありません</div>');
+  sh+=`<div class="cs-hd">✅ 最近の実施</div>`+(done.length?done.map(p=>item(p)).join(''):'<div class="cs-empty">記録はありません</div>');
+  document.getElementById('cal-side').innerHTML=sh;
+}
+function showDayList(k){
+  const evs=Object.values(E).filter(ev=>dayStart(ev.held)===k);
+  const today0=dayStart();
+  document.getElementById('ev-modal-body').innerHTML=`
+    <div class="modal-hd"><span>${fmtW(k)}</span><button class="modal-x" onclick="hideEvModal()">×</button></div>
+    <div style="display:flex;flex-direction:column;gap:4px">${evs.map(ev=>evChip(ev,today0)).join('')}</div>
+    ${isOwner?`<div class="modal-ftr"><button class="btn btn-prim" onclick="openEvModal({date:${k}})">＋ この日に登録</button></div>`:''}`;
+  document.getElementById('ev-modal').classList.remove('hidden');
+}
+
+/* ===== 予定・実施ダイアログ（カレンダー・マップ共通） ===== */
+// opts: {id} 既存を開く / {sid, st, date} 新規
+let emCur=null;
+function storeKey(s){ return s.n; }
+function storeByKey(k){ k=(k||'').trim(); return Object.values(S).find(s=>storeKey(s)===k)||null; }
+function dateVal(ts){ const d=new Date(ts); return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function openEvModal(opts){
+  const ev=opts.id?E[opts.id]:null;
+  if(opts.id&&!ev){ toast('⚠ この予定は削除されています'); return; }
+  const today0=dayStart();
+  const g=ev?groupOf(ev):null;
+  const st=ev?(ev.st==='plan'?'plan':'done'):(opts.st||((opts.date??today0+86400000)>today0?'plan':'done'));
+  const dates=g?g.map(x=>x.held):[opts.date??(st==='plan'?today0+86400000:today0)];
+  const sid=ev?ev.sid:(opts.sid||'');
+  emCur=g?{gid:grpKey(ev),ids:g.map(x=>x.id)}:{gid:null,ids:[]};
+  const s=S[sid];
+  const body=document.getElementById('ev-modal-body');
+  const last=dates[dates.length-1];
+  const dateTxt=dates.length>1?`${fmtDates(dates)}（${dates.length}日間）`:fmtW(dates[0]);
+  // 閲覧のみ
+  if(!isOwner){
+    if(!ev) return;
+    body.innerHTML=`
+      <div class="modal-hd"><span>${st==='plan'?'📅 予定':'✅ 実施記録'}</span><button class="modal-x" onclick="hideEvModal()">×</button></div>
+      <div class="em-ro"><b>${esc(s?.n||'（削除された店舗）')}</b><br>${dateTxt}${st==='plan'&&last<today0?' ・実施報告待ち':''}
+      ${st==='done'?`<br>商圏復活日：${fmt(addM(last,3))}`:''}${ev.memo?`<br>メモ：${esc(ev.memo)}`:''}</div>
+      <div class="modal-ftr">${s?`<button class="btn btn-sec" onclick="goMap('${sid}')">🗺 マップで見る</button>`:''}<button class="btn btn-sec" onclick="hideEvModal()">閉じる</button></div>`;
+    document.getElementById('ev-modal').classList.remove('hidden');
+    return;
+  }
+  // 店舗候補
+  const dl=document.getElementById('store-names');
+  dl.innerHTML=Object.values(S).filter(x=>x.a).sort((a,b)=>a.n.localeCompare(b.n,'ja')).map(x=>`<option value="${esc(storeKey(x))}">`).join('');
+  body.innerHTML=`
+    <div class="modal-hd"><span>${ev?(st==='plan'?'📅 予定の編集':'✅ 実施記録の編集'):'＋ 予定・実施の登録'}</span><button class="modal-x" onclick="hideEvModal()">×</button></div>
+    <div class="f-row">
+      <label class="f-lbl">店舗 <span class="req">必須</span></label>
+      <input class="f-inp" id="em-store" list="store-names" placeholder="店舗名を入力して選択" value="${s?esc(storeKey(s)):''}" oninput="emUpdate()">
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">日程（複数可）</label>
+      <div class="em-dates" id="em-dates"></div>
+      <div class="em-dadd">
+        <button class="btn btn-sec" onclick="emAddDate(1)">＋ 翌日を追加</button>
+        <button class="btn btn-sec" onclick="emAddDate(0)">＋ 日程を追加</button>
+      </div>
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">種別</label>
+      <div class="em-type">
+        <label id="em-l-plan"><input type="radio" name="em-st" value="plan" ${st==='plan'?'checked':''} onchange="emUpdate()">📅 予定</label>
+        <label id="em-l-done"><input type="radio" name="em-st" value="done" ${st==='done'?'checked':''} onchange="emUpdate()">✅ 実施済</label>
+      </div>
+      <div class="f-hint" id="em-hint"></div>
+    </div>
+    <div class="f-row">
+      <label class="f-lbl">メモ</label>
+      <textarea class="f-inp" id="em-memo" placeholder="担当者・内容など（任意）">${esc(ev?.memo||'')}</textarea>
+    </div>
+    <div id="em-warn"></div>
+    <div class="modal-ftr">
+      ${ev?`<button class="btn btn-dng" style="flex:0 0 auto;width:auto" onclick="emDelete()">削除</button>`:''}
+      ${s?`<button class="btn btn-sec" onclick="goMap('${sid}')">🗺 マップ</button>`:''}
+      <button class="btn btn-prim" id="em-save" onclick="emSave()">保存</button>
+    </div>
+    ${ev&&st==='plan'&&last<=Date.now()?`<button class="btn btn-dark" style="width:100%;margin-top:10px" onclick="emMarkDone()">✅ 実施済にする（マップに反映）</button>`:''}`;
+  for(const d of dates) emDateRow(d);
+  document.getElementById('ev-modal').classList.remove('hidden');
+  emUpdate();
+}
+function emDateRow(ts){
+  const row=document.createElement('div');
+  row.className='em-drow';
+  row.innerHTML=`<input class="f-inp em-d" type="date" value="${ts!=null?dateVal(ts):''}" oninput="emUpdate()"><button class="btn btn-sec" title="この日程を削除" onclick="emDelDate(this)">×</button>`;
+  document.getElementById('em-dates').appendChild(row);
+}
+// next=1：最後の日程の翌日を追加 / 0：空欄を追加して日付を選んでもらう
+function emAddDate(next){
+  const ds=emRead().dates;
+  if(next&&ds.length) emDateRow(ds[ds.length-1]+86400000);
+  else { emDateRow(null); const ins=document.querySelectorAll('.em-d'); const el=ins[ins.length-1]; el.focus(); try{el.showPicker();}catch(e){} }
+  emUpdate();
+}
+function emDelDate(btn){
+  if(document.querySelectorAll('.em-drow').length<=1){ toast('⚠ 日程は1つ以上必要です'); return; }
+  btn.parentElement.remove();
+  emUpdate();
+}
+function emMarkDone(){
+  document.querySelector('input[name=em-st][value=done]').checked=true;
+  emSave();
+}
+function hideEvModal(){ document.getElementById('ev-modal').classList.add('hidden'); emCur=null; }
+function emRead(){
+  const s=storeByKey(document.getElementById('em-store').value);
+  const dates=[...new Set([...document.querySelectorAll('.em-d')].map(i=>i.value).filter(Boolean)
+    .map(v=>new Date(v+'T00:00:00').getTime()).filter(t=>!isNaN(t)))].sort((a,b)=>a-b);
+  const st=document.querySelector('input[name=em-st]:checked')?.value||'plan';
+  return{s,dates,st,memo:document.getElementById('em-memo').value.trim()};
+}
+function emUpdate(){
+  const{s,dates,st}=emRead();
+  const future=dates.some(t=>t>dayStart());
+  // 未来の日付を含む場合は「予定」のみ
+  const doneIn=document.querySelector('input[name=em-st][value=done]');
+  doneIn.disabled=future;
+  if(future&&st==='done') document.querySelector('input[name=em-st][value=plan]').checked=true;
+  const cur=document.querySelector('input[name=em-st]:checked').value;
+  document.getElementById('em-l-plan').className=cur==='plan'?'on-plan':'';
+  document.getElementById('em-l-done').className=(cur==='done'?'on-done':'')+(future?' dis':'');
+  document.getElementById('em-hint').textContent=cur==='plan'
+    ?'予定はカレンダーだけに表示され、マップには反映されません。全日程の終了後に「実施済」に切り替えてください。'
+    :'実施済にすると、マップの商圏に反映されます（最終日から3か月間）。';
+  // 商圏の重複チェック（各日程の時点）
+  const msgs=[];
+  if(s&&dates.length){
+    const excl=new Set(emCur?.ids||[]);
+    const byMsg={};
+    for(const t of dates){
+      const r=statusAt(s.id,t,excl);
+      let m='';
+      if(r.st==='ev') m=`まだ商圏が復活していません（${fmt(r.ev.held)} 実施 → 復活 ${fmt(r.ev.exp)}）`;
+      else if(r.st==='re') m=`商圏が重複しています：<b>${esc(r.by.n)}</b>（${fmt(r.ev.held)} 実施 → 解除 ${fmt(r.ev.exp)}）`;
+      if(m) (byMsg[m]=byMsg[m]||[]).push(t);
+    }
+    for(const[m,ts] of Object.entries(byMsg)) msgs.push(`⚠ ${fmtDates(ts)}：${m}`);
+    const others=groups(ev=>ev.st==='plan'&&ev.sid===s.id&&!excl.has(ev.id));
+    if(others.length) msgs.push(`📅 この店舗には他に予定があります：${others.map(g=>fmtDates(g.map(x=>x.held))).join(' ／ ')}`);
+  }
+  document.getElementById('em-warn').innerHTML=msgs.length?`<div class="em-warn">${msgs.join('<br>')}</div>`:'';
+}
+function emSave(){
+  const{s,dates,st,memo}=emRead();
+  if(!s){ toast('⚠ 店舗を候補から選んでください'); return; }
+  if(!dates.length){ toast('⚠ 日付を入力してください'); return; }
+  if(st==='done'&&dates.some(t=>t>Date.now())){ toast('⚠ 未来の日付は実施済にできません'); return; }
+  const gid=emCur?.gid||genId();
+  const old=(emCur?.ids||[]).map(id=>E[id]).filter(Boolean);
+  const by=old[0]?.by||authUser?.email||'';
+  const used=new Set();
+  for(const held of dates){
+    // 同じ日付の既存レコードはIDを引き継ぐ
+    const keep=old.find(o=>!used.has(o.id)&&dayStart(o.held)===held);
+    const id=keep?.id||genId();
+    used.add(id);
+    const d={...(keep||{}),id,sid:s.id,held,exp:addM(held,3),st,memo,by,grp:gid};
+    E[id]=d;
+    if(db) db.doc(`events/${id}`).set(d).catch(()=>{});
+  }
+  for(const o of old) if(!used.has(o.id)){
+    delete E[o.id];
+    if(db) db.doc(`events/${o.id}`).delete().catch(()=>{});
+  }
+  if(!db) saveL();
+  hideEvModal();
+  render();
+  const dt=dates.length>1?`${fmtDates(dates)}・${dates.length}日間`:fmt(dates[0]);
+  toast(st==='plan'?`📅 ${s.n} の予定を保存しました（${dt}）`:`✅ ${s.n} の実施を保存しました（${dt}）`);
+}
+function emDelete(){
+  const ids=(emCur?.ids||[]).filter(id=>E[id]); if(!ids.length) return;
+  const ev=E[ids[0]];
+  const dt=ids.length>1?`${fmtDates(ids.map(id=>E[id].held))}・${ids.length}日間`:fmt(ev.held);
+  if(!confirm(`${S[ev.sid]?.n||''} の${ev.st==='plan'?'予定':'実施記録'}（${dt}）を削除しますか？`)) return;
+  for(const id of ids){
+    delete E[id];
+    if(db) db.doc(`events/${id}`).delete().catch(()=>{});
+  }
+  if(!db) saveL();
+  hideEvModal();
+  render();
+  toast('🗑 削除しました');
+}
+function goMap(sid){
+  hideEvModal();
+  setView('map');
+  setTimeout(()=>sel(sid),50);
+}
+
+/* ===== DB 初期化 & 起動 ===== */
+(async()=>{
+  try{ if(localStorage.getItem('mg_view')==='cal') setView('cal'); }catch(e){}
+  // 店舗データはRAWから同期構築済みなので、DB読み込みを待たずに即座に初期描画する
+  fitAll();
+  render();
+
+  try{
+    db = createSupabaseDb();
+    sb.auth.onAuthStateChange((_ev, session)=>{ setTimeout(()=>refreshAuth(session),0); });
+    const { data:{ session } } = await sb.auth.getSession();
+    const ownerCheck = refreshAuth(session, true);
+
+    const dataLoad = Promise.all([
+      db.collection('events').get(),
+      db.collection('stores').get(),
+      db.collection('stores_custom').get()
+    ]).then(([evSnap, stSnap, csSnap])=>{
+      const now = Date.now();
+      for(const doc of evSnap.docs){
+        const e = doc.data();
+        if(e && e.exp > now) E[doc.id] = e;
+      }
+      for(const doc of stSnap.docs) applyStoreOverride(doc.id, doc.data());
+      for(const doc of csSnap.docs) applyCustomStore(doc.id, doc.data());
+    });
+
+    await Promise.all([ownerCheck, dataLoad]);
+    fitAll();
+    render();
+
+    // リアルタイム同期（他のユーザーの変更を即反映）
+    db.onChange(({collection, id, data, deleted})=>{
+      const now = Date.now();
+      if(collection==='events'){
+        if(deleted || !data || data.exp <= now) delete E[id];
+        else E[id] = data;
+      } else if(collection==='stores'){
+        if(!deleted) applyStoreOverride(id, data);
+      } else if(collection==='stores_custom'){
+        if(deleted){ if(S[id]?.custom){ delete S[id]; if(selId===id) closeDetail(); } }
+        else applyCustomStore(id, data);
+      } else return;
+      render();
+    });
+  }catch(e){
+    console.error(e);
+    db = null;
+    toast('⚠ データベースに接続できませんでした');
+    loadL();
+    fitAll();
+    render();
+  }
+})();
+
+/* Toast */
+var _tt; // 起動直後のエラー表示でも使えるよう var で宣言
+function toast(msg){const e=document.getElementById('toast');e.textContent=msg;e.classList.add('on');clearTimeout(_tt);_tt=setTimeout(()=>e.classList.remove('on'),3000);}
+
+/* Window resize */
+window.addEventListener('resize',()=>map.invalidateSize());
+
+</script>
+</body>
+</html>
