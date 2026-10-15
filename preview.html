@@ -53,8 +53,7 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 body[data-view=cal] #view-map,body[data-view=map] #cal{display:none!important}
 
 /* ===== 2. ヘッダー ===== */
-.hdr-logo{height:38px;width:38px;border-radius:12px;background:var(--grad);border:1px solid var(--gold);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.hdr-logo svg{width:22px;height:22px}
+.hdr-logo{height:38px;width:auto;display:block;flex-shrink:0}
 .hdr-sep{width:1px;height:32px;background:var(--line)}
 .hdr-name{display:flex;flex-direction:column;line-height:1.35}
 .hdr-name b{font-size:11px;font-weight:700}
@@ -305,8 +304,7 @@ textarea.f-inp{resize:vertical;min-height:64px}
   :root{--header-h:60px}
   body{overflow:auto}
   #hdr{padding:0 16px;gap:10px}
-  .hdr-logo{width:28px;height:28px;border-radius:9px}
-  .hdr-logo svg{width:16px;height:16px}
+  .hdr-logo{height:28px}
   .hdr-sep,.hdr-name,.hdr-who{display:none}
   #side{top:var(--header-h);bottom:auto;right:0;width:auto;height:auto;flex-direction:row;gap:6px;padding:8px 16px;overflow-x:auto;border-bottom:1px solid var(--line)}
   .side-grp,.side-note{display:none}
@@ -337,11 +335,9 @@ textarea.f-inp{resize:vertical;min-height:64px}
 <body data-view="map">
 
 <header id="hdr">
-  <div class="hdr-logo" aria-hidden="true">
-    <svg viewBox="0 0 24 24" fill="none" stroke="#1F1F1F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/></svg>
-  </div>
+  <img class="hdr-logo" src="logo.png" alt="MYGOL マイゴル">
   <div class="hdr-sep"></div>
-  <div class="hdr-name"><b>MYGOL 商圏マッピング</b><span>TRADE AREA MAPPING</span></div>
+  <div class="hdr-name"><b>商圏マッピング</b><span>TRADE AREA MAPPING</span></div>
   <div class="hdr-user">
     <div class="hdr-who">
       <span class="auth-who" id="auth-who">ゲスト</span>
