@@ -46,11 +46,23 @@ button,input,select,textarea{font-family:inherit;color:inherit}
 /* ===== 1. 全体レイアウト ===== */
 #hdr{position:fixed;top:0;left:0;right:0;height:var(--header-h);display:flex;align-items:center;gap:16px;padding:0 24px;background:var(--white);border-bottom:1px solid var(--line);z-index:40}
 #side{position:fixed;top:var(--header-h);left:0;bottom:0;width:var(--side-w);background:var(--gray);padding:22px 14px;overflow-y:auto;display:flex;flex-direction:column;z-index:30}
-#main{position:fixed;top:var(--header-h);left:var(--side-w);right:0;bottom:0;overflow-y:auto}
+#main{position:fixed;top:var(--header-h);left:var(--side-w);right:0;bottom:0;overflow-y:auto;transition:left .2s}
+#side{transition:width .2s,padding .2s}
+/* 左メニューを畳んだ状態（アイコンのみ） */
+body.side-min #side{width:68px;padding:22px 10px}
+body.side-min #main{left:68px}
+body.side-min .side-grp,body.side-min .side-note,body.side-min .side-lbl{display:none}
+body.side-min .side-item{justify-content:center;padding:9px 0;position:relative}
+body.side-min .side-badge{position:absolute;top:-2px;right:2px;min-width:18px;height:18px;padding:0 5px;font-size:10px}
+.hdr-menu{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--white);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:var(--ink)}
+.hdr-menu:hover{background:var(--gray)}
+.hdr-menu svg{width:20px;height:20px}
 .view{max-width:var(--content-max);margin:0 auto;padding:30px 36px 72px;display:flex;flex-direction:column;gap:24px}
 /* マップは画面いっぱいに使う（見出し＋地図カードで高さを埋める） */
-#view-map{max-width:none;height:100%;padding-bottom:24px;min-height:620px}
+/* マップはページ全体をスクロールして、地図カードを画面いっぱいまで上げられる */
+#view-map{max-width:none;padding-bottom:36px}
 body[data-view=cal] #view-map,body[data-view=map] #cal{display:none!important}
+#cal{max-width:none}
 
 /* ===== 2. ヘッダー ===== */
 .hdr-logo{height:38px;width:auto;display:block;flex-shrink:0}
@@ -147,7 +159,7 @@ textarea.f-inp{resize:vertical;min-height:64px}
 .cs-empty{background:var(--gray);border-radius:14px;padding:14px;text-align:center;font-size:12px;color:var(--muted2)}
 
 /* ===== 商圏マップ ===== */
-.map-card{flex:1;min-height:0;display:flex;border:1px solid var(--line);border-radius:var(--radius-card);overflow:hidden;background:var(--white)}
+.map-card{height:calc(100vh - var(--header-h) - 48px);min-height:560px;display:flex;border:1px solid var(--line);border-radius:var(--radius-card);overflow:hidden;background:var(--white)}
 #sb{width:320px;min-width:320px;display:flex;flex-direction:column;border-right:1px solid var(--line);background:var(--white);overflow:hidden}
 .sb-top{padding:14px 16px 0}
 .sb-sub{font-size:12px;color:var(--muted);font-weight:700}
@@ -249,21 +261,23 @@ textarea.f-inp{resize:vertical;min-height:64px}
 .dp-item.late{background:var(--warn-soft);color:var(--warn)}
 
 /* ===== カレンダー ===== */
-.cal-wrap{display:grid;grid-template-columns:1fr 300px;gap:24px;align-items:start}
+.cal-wrap{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}
 .cal-main{display:flex;flex-direction:column;gap:14px;padding:20px}
 .cal-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .cal-hd .btn{padding:5px 14px;font-size:12px}
 .cal-ym{font-family:var(--f-en);font-size:22px;font-weight:800;min-width:130px;text-align:center;font-variant-numeric:tabular-nums}
 .cal-legend{margin-left:auto;display:flex;gap:8px;align-items:center}
-.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(104px,auto);border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--line);gap:1px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));--cal-row:max(130px,calc((100vh - 420px) / 5));border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--line);gap:1px}
 .cal-dow{background:var(--gray);font-size:11px;font-weight:700;text-align:center;padding:6px 0;color:var(--muted)}
 .cal-dow.sun,.cd.sun .cd-n{color:var(--bad)}.cal-dow.sat,.cd.sat .cd-n{color:var(--range)}
-.cd{background:var(--white);padding:6px;display:flex;flex-direction:column;gap:3px;min-width:0;overflow:hidden}
+.cd{background:var(--white);padding:6px 6px 8px;display:flex;flex-direction:column;gap:3px;min-width:0;overflow:hidden}
 .cd.can-add{cursor:pointer}.cd.can-add:hover{background:var(--hover)}
 .cd.oth{background:#FAFAFA}.cd.oth .cd-n{opacity:.4}
 .cd-n{font-family:var(--f-en);font-size:12px;font-weight:800;line-height:24px;width:24px;height:24px;text-align:center;border-radius:50%;flex-shrink:0}
 .cd.tod .cd-n{background:var(--black);color:var(--yellow)!important}
-.ce{font-size:11px;font-weight:700;line-height:1.4;padding:2px 8px;border-radius:var(--radius-pill);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;flex-shrink:0}
+.ce{font-size:12px;font-weight:700;line-height:1.4;padding:3px 8px;border-radius:8px;overflow:hidden;cursor:pointer;flex-shrink:0;word-break:break-all}
+.ce-m{display:block;font-size:10.5px;font-weight:500;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-legend .ce{border-radius:var(--radius-pill);white-space:nowrap}
 .ce:hover{filter:brightness(.96)}
 .ce.plan{background:var(--info-soft);color:var(--info);border:1px dashed var(--gold)}
 .ce.plan.late{background:var(--warn-soft);color:var(--warn);border-color:var(--orange)}
@@ -315,7 +329,7 @@ textarea.f-inp{resize:vertical;min-height:64px}
   .page-head{flex-wrap:wrap;align-items:flex-start;gap:12px}
   .ph-txt{flex-basis:100%}
   .ph-desc{font-size:13px}
-  #view-map{height:auto;min-height:0}
+  .map-card{height:auto;min-height:0}
   .map-card{flex-direction:column-reverse;flex:none}
   #sb{width:auto;min-width:0;border-right:none;border-top:1px solid var(--line);max-height:none}
   #list{max-height:50vh}
@@ -324,9 +338,12 @@ textarea.f-inp{resize:vertical;min-height:64px}
   #detail{position:fixed;top:auto;left:8px;right:8px;bottom:8px;width:auto;max-height:70vh;z-index:1500}
   .cal-wrap{grid-template-columns:1fr}
   .cal-main{padding:12px}
-  .cal-grid{grid-auto-rows:minmax(72px,auto)}
+  .cal-grid{--cal-row:72px}
   .cal-legend{display:none}
-  .ce{font-size:9px;padding:1px 4px}
+  .ce{font-size:9px;padding:1px 4px;white-space:nowrap;text-overflow:ellipsis;word-break:normal}
+  .ce-m{display:none}
+  .hdr-menu{display:none}
+  body.side-min .side-lbl{display:inline}
   .ce-l{display:none}
   .cal-side{position:static}
 }
@@ -335,6 +352,9 @@ textarea.f-inp{resize:vertical;min-height:64px}
 <body data-view="map">
 
 <header id="hdr">
+  <button class="hdr-menu" onclick="toggleSide()" title="メニューを畳む／開く" aria-label="メニューを畳む／開く">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
   <img class="hdr-logo" src="logo.png" alt="MYGOL マイゴル">
   <div class="hdr-sep"></div>
   <div class="hdr-name"><b>商圏マッピング</b><span>TRADE AREA MAPPING</span></div>
@@ -349,13 +369,13 @@ textarea.f-inp{resize:vertical;min-height:64px}
 
 <nav id="side">
   <div class="side-grp">MENU</div>
-  <button class="side-item active" id="tab-map" onclick="setView('map')">
+  <button class="side-item active" id="tab-map" title="商圏マップ" onclick="setView('map')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>
-    商圏マップ<span class="side-badge" id="badge-map"></span>
+    <span class="side-lbl">商圏マップ</span>
   </button>
-  <button class="side-item" id="tab-cal" onclick="setView('cal')">
+  <button class="side-item" id="tab-cal" title="カレンダー" onclick="setView('cal')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
-    カレンダー<span class="side-badge" id="badge-cal"></span>
+    <span class="side-lbl">カレンダー</span><span class="side-badge" id="badge-cal"></span>
   </button>
   <div class="side-note">地図：国土地理院<br>店舗の色は実施済の記録だけで決まります</div>
 </nav>
@@ -947,8 +967,7 @@ function renderBadges(){
   const today0=dayStart();
   const pg=groups(ev=>ev.st==='plan');
   const late=pg.filter(g=>g.at(-1).held<today0).length;
-  const bm=document.getElementById('badge-map'), bc=document.getElementById('badge-cal');
-  bm.textContent=Object.keys(S).length;
+  const bc=document.getElementById('badge-cal');
   // 実施報告待ちがあれば橙で件数、なければ今後の予定の件数
   bc.textContent=late||pg.length||'';
   bc.classList.toggle('warn',!!late);
@@ -1339,6 +1358,13 @@ async function sendLoginLink(){
 /* ===== カレンダー ===== */
 let view='map';
 let calY=new Date().getFullYear(), calM=new Date().getMonth();
+function toggleSide(force){
+  const min=force!==undefined?force:!document.body.classList.contains('side-min');
+  document.body.classList.toggle('side-min',min);
+  try{localStorage.setItem('mg_side_min',min?'1':'0');}catch(e){}
+  // 地図の大きさが変わるので再計算（メニューの開閉アニメーション後）
+  setTimeout(()=>map.invalidateSize(),220);
+}
 function setView(v){
   view=v;
   document.body.dataset.view=v;
@@ -1359,7 +1385,7 @@ function evChip(ev,today0){
   const lbl=ev.st==='plan'?'予定':'実施';
   const g=groupOf(ev);
   const idx=g.length>1?`<span class="ce-i">${g.indexOf(ev)+1}/${g.length}</span>`:'';
-  return `<div class="ce ${cls}" title="${esc(nm)}${ev.memo?' — '+esc(ev.memo):''}" onclick="event.stopPropagation();openEvModal({id:'${ev.id}'})"><span class="ce-l">${lbl}｜</span>${esc(nm)}${idx}</div>`;
+  return `<div class="ce ${cls}" title="${esc(nm)}${ev.memo?' — '+esc(ev.memo):''}" onclick="event.stopPropagation();openEvModal({id:'${ev.id}'})"><span class="ce-l">${lbl}｜</span>${esc(nm)}${idx}${ev.memo?`<span class="ce-m">${esc(ev.memo)}</span>`:''}</div>`;
 }
 function renderCal(){
   document.getElementById('cal-ym').textContent=`${calY}年${calM+1}月`;
@@ -1372,14 +1398,14 @@ function renderCal(){
   const byDay={};
   for(const ev of Object.values(E)){ const k=dayStart(ev.held); (byDay[k]=byDay[k]||[]).push(ev); }
   const grid=document.getElementById('cal-grid');
-  grid.style.gridTemplateRows=`auto repeat(${weeks},1fr)`;
+  grid.style.gridTemplateRows=`auto repeat(${weeks},minmax(var(--cal-row),auto))`;
   let h='';
   for(let i=0;i<7;i++) h+=`<div class="cal-dow ${i===0?'sun':i===6?'sat':''}">${WD[i]}</div>`;
   for(let i=0;i<weeks*7;i++){
     const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
     const k=d.getTime();
     const evs=(byDay[k]||[]).sort((a,b)=>(a.st==='plan')-(b.st==='plan')||(S[a.sid]?.n||'').localeCompare(S[b.sid]?.n||'','ja'));
-    const max=3;
+    const max=6;
     const cls=['cd',d.getMonth()!==calM?'oth':'',k===today0?'tod':'',d.getDay()===0?'sun':d.getDay()===6?'sat':'',isOwner?'can-add':''].join(' ');
     h+=`<div class="${cls}" ${isOwner?`onclick="openEvModal({date:${k}})"`:''}><div class="cd-n">${d.getDate()}</div>`
       +evs.slice(0,max).map(ev=>evChip(ev,today0)).join('')
@@ -1593,6 +1619,7 @@ function goMap(sid){
 /* ===== DB 初期化 & 起動 ===== */
 (async()=>{
   try{ if(localStorage.getItem('mg_view')==='cal') setView('cal'); }catch(e){}
+  try{ if(localStorage.getItem('mg_side_min')==='1') toggleSide(true); }catch(e){}
   // 店舗データはRAWから同期構築済みなので、DB読み込みを待たずに即座に初期描画する
   fitAll();
   render();
