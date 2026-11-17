@@ -1,0 +1,26 @@
+# Supabase の無料プランは1週間アクセスがないと自動で一時停止するため、
+# 3日ごとにデータベースへ軽く読み取りアクセスして停止を防ぐ。
+name: Supabase keepalive
+
+on:
+  schedule:
+    - cron: "17 0 */3 * *"   # 3日ごと 09:17（日本時間）
+  workflow_dispatch:          # Actions 画面から手動実行も可能
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ping Supabase
+        run: |
+          # サイトに埋め込み済みの公開用 anon key を使う（書き込み権限はなく、読み取りのみ）
+          URL=$(grep -o "SB_URL='[^']*'" index.html | cut -d"'" -f2)
+          KEY=$(grep -o "SB_KEY='[^']*'" index.html | cut -d"'" -f2)
+          code=$(curl -sS -o /dev/null -w "%{http_code}" "$URL/rest/v1/docs?select=id&limit=1" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "Supabase responded: $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase が応答しません（HTTP $code）。一時停止している場合はダッシュボードで Restore project を押してください。"
+            exit 1
+          fi
